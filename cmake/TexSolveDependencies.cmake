@@ -25,6 +25,7 @@ set(_texsolve_required_files
   sundials/lib/libsundials_cvode.a
   sundials/lib/libsundials_nvecserial.a
   sundials/lib/libsundials_core.a
+  sundials/lib/libsundials_sunnonlinsolfixedpoint.a
   openblas/include/openblas/cblas.h
   openblas/lib/libopenblas.a
   cln/include/cln/cln.h
@@ -76,6 +77,7 @@ texsolve_import_archive(TexSolveThirdParty::nlopt nlopt/lib/libnlopt.a)
 texsolve_import_archive(TexSolveThirdParty::sundials_cvode sundials/lib/libsundials_cvode.a)
 texsolve_import_archive(TexSolveThirdParty::sundials_nvecserial sundials/lib/libsundials_nvecserial.a)
 texsolve_import_archive(TexSolveThirdParty::sundials_core sundials/lib/libsundials_core.a)
+texsolve_import_archive(TexSolveThirdParty::sundials_fixedpoint sundials/lib/libsundials_sunnonlinsolfixedpoint.a)
 texsolve_import_archive(TexSolveThirdParty::openblas openblas/lib/libopenblas.a)
 texsolve_import_archive(TexSolveThirdParty::cln cln/lib/libcln.a)
 
@@ -86,4 +88,5 @@ target_link_libraries(texsolve_third_party INTERFACE
   TexSolveThirdParty::armadillo TexSolveThirdParty::openblas
   TexSolveThirdParty::gsl TexSolveThirdParty::gslcblas
   TexSolveThirdParty::ceres TexSolveThirdParty::nlopt
-  TexSolveThirdParty::sundials_cvode TexSolveThirdParty::sundials_nvecserial TexSolveThirdParty::sundials_core)
+  TexSolveThirdParty::sundials_cvode TexSolveThirdParty::sundials_nvecserial
+  TexSolveThirdParty::sundials_fixedpoint TexSolveThirdParty::sundials_core)

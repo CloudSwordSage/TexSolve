@@ -20,3 +20,7 @@ add_test(NAME core_context_tests COMMAND texsolve_context_tests)
 add_executable(texsolve_core_tests core_tests.cpp)
 target_link_libraries(texsolve_core_tests PRIVATE TexSolve::static TexSolveThirdParty::all)
 add_test(NAME core_tests COMMAND texsolve_core_tests)
+
+add_executable(texsolve_solver_tests solver_tests.cpp)
+target_link_libraries(texsolve_solver_tests PRIVATE TexSolve::static TexSolveThirdParty::all)
+add_test(NAME solver_tests COMMAND texsolve_solver_tests)

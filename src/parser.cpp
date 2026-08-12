@@ -399,7 +399,8 @@ private:
             }
             const bool ode_lhs = !partial && *numerator_text != "d" &&
                                  !numerator_text->ends_with(std::to_string(*numerator_order));
-            if (ode_lhs) return make(NodeKind::Derivative, *denominator_text, start, pos_);
+            if (ode_lhs) return make(NodeKind::Derivative, *numerator_text + "|" + *denominator_text,
+                                     start, pos_);
             auto body = starts("{") ? parse_group('{', '}') : std::nullopt;
             if (!body) return fail_node("derivative requires an expression", pos_);
             return make(NodeKind::Derivative, *denominator_text, start, body->end, {std::move(*body)});
