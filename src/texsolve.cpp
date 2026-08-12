@@ -1,11 +1,13 @@
 #include <texsolve/texsolve.h>
 
 #include "internal.hpp"
+#include "evaluator.hpp"
 
 #include <algorithm>
 #include <cstring>
 #include <memory>
 #include <map>
+#include <limits>
 #include <new>
 #include <string>
 #include <string_view>
@@ -151,6 +153,17 @@ bool valid_view(texsolve_string_view view) {
     return view.data != nullptr || view.size == 0;
 }
 
+bool checked_add(std::size_t value, std::size_t &total) {
+    if (value > std::numeric_limits<std::size_t>::max() - total) return false;
+    total += value;
+    return true;
+}
+
+void attach_metadata(texsolve_result &result, uint32_t precision) {
+    result.metadata = make_node(TEXSOLVE_RESULT_METADATA);
+    append_integer(*result.metadata, "precision_digits", precision);
+}
+
 std::string source_of(std::string_view input, const texsolve::Node &node) {
     if (node.end < node.begin || node.end > input.size()) return {};
     return std::string(input.substr(node.begin, node.end - node.begin));
@@ -233,7 +246,18 @@ texsolve_status TEXSOLVE_CALL texsolve_execute(
     if (request->operation < TEXSOLVE_OPERATION_AUTO || request->operation > TEXSOLVE_OPERATION_DEFINE) {
         return TEXSOLVE_STATUS_INVALID_ARGUMENT;
     }
+    if (request->symbolic_backend < TEXSOLVE_SYMBOLIC_AUTO ||
+        request->symbolic_backend > TEXSOLVE_SYMBOLIC_GINAC) {
+        return TEXSOLVE_STATUS_INVALID_ARGUMENT;
+    }
+    if ((request->binding_count != 0 && request->bindings == nullptr) ||
+        (request->binding_count != 0 && request->binding_stride < TEXSOLVE_BINDING_V1_SIZE) ||
+        (request->binding_count != 0 && request->binding_stride >
+             std::numeric_limits<std::size_t>::max() / request->binding_count)) {
+        return TEXSOLVE_STATUS_INVALID_ARGUMENT;
+    }
     const uint32_t input_limit = request->max_input_bytes ? request->max_input_bytes : ctx->config.max_input_bytes;
+    std::size_t input_bytes = request->latex.size;
     if (request->latex.size > input_limit) {
         texsolve::ParseOutput error;
         error.message = "input byte limit exceeded";
@@ -283,7 +307,81 @@ texsolve_status TEXSOLVE_CALL texsolve_execute(
                 ctx->variables.erase(target.text);
                 result->name = target.text;
             }
+            *out = result.release();
+            return TEXSOLVE_STATUS_OK;
         }
+
+        std::map<std::string, texsolve::Node> bindings;
+        for (const auto &[name, value] : ctx->variables) {
+            auto binding = texsolve::parse_for_debug(value, nesting, nodes);
+            if (binding.ok) bindings.emplace(name, std::move(binding.root));
+        }
+        const auto *binding_bytes = reinterpret_cast<const unsigned char *>(request->bindings);
+        for (std::size_t index = 0; index < request->binding_count; ++index) {
+            const auto *binding = reinterpret_cast<const texsolve_binding *>(
+                binding_bytes + index * request->binding_stride);
+            if (binding->struct_size < TEXSOLVE_BINDING_V1_SIZE || !valid_view(binding->name) ||
+                !valid_view(binding->value_latex) || !valid_view(binding->lower_latex) ||
+                !valid_view(binding->upper_latex)) {
+                return TEXSOLVE_STATUS_INVALID_ARGUMENT;
+            }
+            if (!checked_add(binding->name.size, input_bytes) ||
+                !checked_add(binding->value_latex.size, input_bytes) ||
+                !checked_add(binding->lower_latex.size, input_bytes) ||
+                !checked_add(binding->upper_latex.size, input_bytes)) {
+                return TEXSOLVE_STATUS_INVALID_ARGUMENT;
+            }
+            if (input_bytes > input_limit) {
+                texsolve::ParseOutput error;
+                error.message = "aggregate input byte limit exceeded";
+                error.diagnostic_code = TEXSOLVE_DIAGNOSTIC_INPUT_LIMIT;
+                *out = make_error(TEXSOLVE_STATUS_RESOURCE_LIMIT, error).release();
+                return TEXSOLVE_STATUS_RESOURCE_LIMIT;
+            }
+            const std::string name(binding->name.data, binding->name.size);
+            const std::string_view value(binding->value_latex.data, binding->value_latex.size);
+            auto value_ast = texsolve::parse_for_debug(value, nesting, nodes);
+            if (!value_ast.ok || value_ast.root.kind == texsolve::NodeKind::Definition ||
+                !bindings.emplace(name, std::move(value_ast.root)).second) {
+                texsolve::ParseOutput error;
+                error.message = "binding names must be unique scalar symbols";
+                error.diagnostic_code = TEXSOLVE_DIAGNOSTIC_DUPLICATE_NAME;
+                *out = make_error(TEXSOLVE_STATUS_SEMANTIC_ERROR, error).release();
+                return TEXSOLVE_STATUS_SEMANTIC_ERROR;
+            }
+        }
+
+        int32_t operation = request->operation;
+        if (operation == TEXSOLVE_OPERATION_AUTO) {
+            if (parsed.root.kind == texsolve::NodeKind::Derivative) operation = TEXSOLVE_OPERATION_DIFFERENTIATE;
+            else if (parsed.root.kind == texsolve::NodeKind::Integral) operation = TEXSOLVE_OPERATION_INTEGRATE;
+            else if (parsed.root.kind == texsolve::NodeKind::Fold) {
+                operation = parsed.root.text.starts_with("sum") ? TEXSOLVE_OPERATION_SUM : TEXSOLVE_OPERATION_PRODUCT;
+            } else operation = TEXSOLVE_OPERATION_EVALUATE;
+        }
+        const uint32_t precision = request->precision_digits ? request->precision_digits : ctx->config.precision_digits;
+        if (precision > 10000) {
+            texsolve::ParseOutput error;
+            error.message = "precision limit exceeded";
+            error.diagnostic_code = TEXSOLVE_DIAGNOSTIC_PRECISION_LIMIT;
+            *out = make_error(TEXSOLVE_STATUS_RESOURCE_LIMIT, error).release();
+            return TEXSOLVE_STATUS_RESOURCE_LIMIT;
+        }
+        auto evaluated = texsolve::evaluate(parsed.root, operation, request->symbolic_backend,
+                                            bindings, precision);
+        if (evaluated.status != TEXSOLVE_STATUS_OK) {
+            texsolve::ParseOutput error;
+            error.message = evaluated.message;
+            error.diagnostic_code = evaluated.diagnostic_code;
+            *out = make_error(evaluated.status, error).release();
+            (*out)->backend = std::move(evaluated.backend);
+            return evaluated.status;
+        }
+        result->kind = evaluated.kind;
+        result->exact = std::move(evaluated.exact);
+        result->approximation = std::move(evaluated.approximation);
+        result->backend = std::move(evaluated.backend);
+        attach_metadata(*result, precision);
         *out = result.release();
         return TEXSOLVE_STATUS_OK;
     } catch (...) {

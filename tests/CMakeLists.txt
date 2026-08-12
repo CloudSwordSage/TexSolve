@@ -16,3 +16,7 @@ add_test(NAME parser_tests COMMAND texsolve_parser_tests)
 add_executable(texsolve_context_tests context_tests.cpp)
 target_link_libraries(texsolve_context_tests PRIVATE TexSolve::static TexSolveThirdParty::all)
 add_test(NAME core_context_tests COMMAND texsolve_context_tests)
+
+add_executable(texsolve_core_tests core_tests.cpp)
+target_link_libraries(texsolve_core_tests PRIVATE TexSolve::static TexSolveThirdParty::all)
+add_test(NAME core_tests COMMAND texsolve_core_tests)
