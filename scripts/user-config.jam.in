@@ -1,0 +1,4 @@
+using @TOOLSET@
+    : : @CXX@
+    : <cxxflags>"@CXXFLAGS@" <cflags>"@CFLAGS@"
+    ;

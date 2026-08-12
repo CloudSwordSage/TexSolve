@@ -1,0 +1,10 @@
+.vscode/
+.codex/
+.codegraph/
+.belt/
+
+tmp/
+third_party/
+build/
+
+codegraph.json
