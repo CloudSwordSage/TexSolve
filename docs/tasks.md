@@ -73,17 +73,17 @@
 
 ## 5. CLI、安装与整体验收
 
-- [ ] **TASK-013 实现动态链接 CLI 与 REPL**
+- [x] **TASK-013 实现动态链接 CLI 与 REPL**
   - 支持参数、stdin、文件、REPL、子命令、后端/精度设置和 `-debug`。
   - 验证：stdout/stderr、退出码、会话定义和所有输入源。
   - _依赖：TASK-005 至 TASK-012；需求：REQ-003、REQ-011、REQ-012；组件：COMP-1、COMP-2、COMP-10_
 
-- [ ] **TASK-014 实现安装和 CMake package**
+- [x] **TASK-014 实现安装和 CMake package**
   - 安装头、DLL、静态库、CLI、targets/config/version 文件。
   - 验证：安装树外的 shared/static consumer 完整构建测试。
   - _依赖：TASK-001、TASK-002；需求：REQ-012、REQ-014；组件：CMake/安装_
 
-- [ ] **TASK-015 完成资源与性能验收**
+- [x] **TASK-015 完成资源与性能验收**
   - 覆盖每项上下界、协作式截止、多 context 并行和 100 次性能基准。
   - 验证：全量 CTest 通过且 Release p95 ≤ 50 ms。
   - _依赖：TASK-003 至 TASK-014；需求：REQ-013、REQ-014；组件：全部_

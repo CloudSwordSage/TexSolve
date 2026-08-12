@@ -1,9 +1,265 @@
-#include <iostream>
+#include "internal.hpp"
 
+#include <charconv>
+#include <cstdio>
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include <io.h>
 #include <texsolve/texsolve.h>
 
-int main() {
-    std::cout << "TexSolve " << TEXSOLVE_VERSION_MAJOR << '.' << TEXSOLVE_VERSION_MINOR << '.'
-              << TEXSOLVE_VERSION_PATCH << '\n';
+namespace {
+
+int exit_code(texsolve_status status) {
+    if (status == TEXSOLVE_STATUS_OK) return 0;
+    if (status == TEXSOLVE_STATUS_INVALID_ARGUMENT || status == TEXSOLVE_STATUS_ABI_MISMATCH) return 2;
+    if (status == TEXSOLVE_STATUS_INVALID_UTF8 || status == TEXSOLVE_STATUS_PARSE_ERROR ||
+        status == TEXSOLVE_STATUS_SEMANTIC_ERROR || status == TEXSOLVE_STATUS_OPERATION_MISMATCH) return 3;
+    if (status == TEXSOLVE_STATUS_UNSUPPORTED || status == TEXSOLVE_STATUS_NO_ANALYTIC_SOLUTION ||
+        status == TEXSOLVE_STATUS_BACKEND_UNAVAILABLE || status == TEXSOLVE_STATUS_BACKEND_UNSUPPORTED) return 4;
+    if (status == TEXSOLVE_STATUS_NOT_CONVERGED) return 5;
+    if (status == TEXSOLVE_STATUS_RESOURCE_LIMIT || status == TEXSOLVE_STATUS_DEADLINE_EXCEEDED) return 6;
+    return 70;
+}
+
+std::string text(texsolve_string_view view) {
+    return view.data == nullptr ? std::string{} : std::string(view.data, view.size);
+}
+
+const char *kind_name(int32_t kind) {
+    switch (kind) {
+        case TEXSOLVE_RESULT_LIST: return "list";
+        case TEXSOLVE_RESULT_MAPPING: return "mapping";
+        case TEXSOLVE_RESULT_MATRIX: return "matrix";
+        case TEXSOLVE_RESULT_ROOT_SET: return "roots";
+        case TEXSOLVE_RESULT_ROOT: return "root";
+        case TEXSOLVE_RESULT_OPTIMUM: return "optimum";
+        case TEXSOLVE_RESULT_TRAJECTORY: return "trajectory";
+        case TEXSOLVE_RESULT_SAMPLE: return "sample";
+        default: return "value";
+    }
+}
+
+void print_result(const texsolve_result *result, std::size_t indent = 0) {
+    const auto exact = text(texsolve_result_exact_latex(result));
+    const auto approximate = text(texsolve_result_approximation(result));
+    const auto name = text(texsolve_result_name(result));
+    std::cout << std::string(indent * 2, ' ');
+    if (!name.empty()) std::cout << name << ": ";
+    if (!exact.empty()) {
+        std::cout << exact;
+        if (!approximate.empty() && approximate != exact) std::cout << " ~= " << approximate;
+        std::cout << '\n';
+        return;
+    }
+    if (!approximate.empty()) {
+        std::cout << approximate << '\n';
+        return;
+    }
+    std::cout << kind_name(texsolve_result_kind(result)) << '\n';
+    for (std::size_t index = 0; index < texsolve_result_child_count(result); ++index) {
+        print_result(texsolve_result_child(result, index), indent + 1);
+    }
+}
+
+int execute(texsolve_context *context, std::string_view input, int operation, bool debug) {
+    if (debug) {
+        const auto parsed = texsolve::parse_for_debug(input, 128, 50000);
+        if (parsed.ok) std::cerr << parsed.ast;
+    }
+    texsolve_request request{};
+    request.struct_size = sizeof(request);
+    request.abi_version = TEXSOLVE_ABI_VERSION;
+    request.operation = operation;
+    request.latex = {input.data(), input.size()};
+    texsolve_result *result = nullptr;
+    const auto status = texsolve_execute(context, &request, &result);
+    if (status == TEXSOLVE_STATUS_OK && result != nullptr) print_result(result);
+    if (result != nullptr) {
+        for (std::size_t index = 0; index < texsolve_result_diagnostic_count(result); ++index) {
+            texsolve_diagnostic diagnostic{};
+            diagnostic.struct_size = sizeof(diagnostic);
+            if (texsolve_result_diagnostic(result, index, &diagnostic) == TEXSOLVE_STATUS_OK) {
+                std::cerr << "[" << diagnostic.begin_byte << ',' << diagnostic.end_byte << ") "
+                          << text(diagnostic.message) << '\n';
+            }
+        }
+    }
+    texsolve_result_destroy(result);
+    return exit_code(status);
+}
+
+bool configure_repl(texsolve_context *context, texsolve_context_options &options,
+                    std::string_view line) {
+    if (line.starts_with(":precision ")) {
+        uint32_t precision = 0;
+        const auto value = line.substr(11);
+        const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), precision);
+        if (error != std::errc{} || end != value.data() + value.size() || precision == 0) return false;
+        const auto previous = options.precision_digits;
+        options.precision_digits = precision;
+        if (texsolve_context_configure(context, &options) == TEXSOLVE_STATUS_OK) return true;
+        options.precision_digits = previous;
+        return false;
+    }
+    if (!line.starts_with(":backend ")) return false;
+    std::istringstream input(std::string(line.substr(9)));
+    std::string category;
+    std::string name;
+    std::string trailing;
+    if (!(input >> category >> name) || input >> trailing) return false;
+    auto parse = [&](std::string_view automatic, std::string_view first, std::string_view second) {
+        if (name == automatic) return 0;
+        if (name == first) return 1;
+        if (name == second) return 2;
+        return -1;
+    };
+    int selected = -1;
+    int32_t *target = nullptr;
+    if (category == "symbolic") {
+        selected = parse("auto", "symengine", "ginac");
+        target = &options.symbolic_backend;
+    } else if (category == "linear") {
+        selected = parse("auto", "eigen", "armadillo");
+        target = &options.linear_algebra_backend;
+    } else if (category == "integration") {
+        selected = parse("auto", "gsl", "boost");
+        target = &options.integration_backend;
+    } else if (category == "optimization") {
+        selected = parse("auto", "ceres", "nlopt");
+        target = &options.optimization_backend;
+    }
+    if (target == nullptr || selected < 0) return false;
+    const auto previous = *target;
+    *target = selected;
+    if (texsolve_context_configure(context, &options) == TEXSOLVE_STATUS_OK) return true;
+    *target = previous;
+    return false;
+}
+
+int repl(texsolve_context *context) {
+    texsolve_context_options options{};
+    options.struct_size = sizeof(options);
+    options.abi_version = TEXSOLVE_ABI_VERSION;
+    std::string line;
+    while (std::cout << "> " && std::getline(std::cin, line)) {
+        if (line == ":quit" || line == ":exit") return 0;
+        if (line == ":clear") {
+            texsolve_context_reset(context);
+            continue;
+        }
+        if (line == ":definitions") {
+            texsolve_result *snapshot = nullptr;
+            if (texsolve_context_snapshot(context, &snapshot) == TEXSOLVE_STATUS_OK) {
+                const auto *variables = texsolve_result_child(snapshot, 0);
+                const auto *functions = texsolve_result_child(snapshot, 1);
+                std::cout << texsolve_result_child_count(variables) << " variables, "
+                          << texsolve_result_child_count(functions) << " functions\n";
+            }
+            texsolve_result_destroy(snapshot);
+            continue;
+        }
+        if (line.starts_with(":precision ") || line.starts_with(":backend ")) {
+            if (!configure_repl(context, options, line)) std::cerr << "invalid REPL setting\n";
+            continue;
+        }
+        if (!line.empty()) execute(context, line, TEXSOLVE_OPERATION_AUTO, false);
+    }
     return 0;
+}
+
+int operation_for(std::string_view name) {
+    if (name == "evaluate") return TEXSOLVE_OPERATION_EVALUATE;
+    if (name == "simplify") return TEXSOLVE_OPERATION_SIMPLIFY;
+    if (name == "expand") return TEXSOLVE_OPERATION_EXPAND;
+    if (name == "factor") return TEXSOLVE_OPERATION_FACTOR;
+    if (name == "differentiate") return TEXSOLVE_OPERATION_DIFFERENTIATE;
+    if (name == "integrate") return TEXSOLVE_OPERATION_INTEGRATE;
+    if (name == "limit") return TEXSOLVE_OPERATION_LIMIT;
+    if (name == "sum") return TEXSOLVE_OPERATION_SUM;
+    if (name == "product") return TEXSOLVE_OPERATION_PRODUCT;
+    if (name == "solve") return TEXSOLVE_OPERATION_SOLVE;
+    if (name == "linear" || name == "linear-algebra") return TEXSOLVE_OPERATION_LINEAR_ALGEBRA;
+    if (name == "optimize") return TEXSOLVE_OPERATION_OPTIMIZE;
+    if (name == "ode") return TEXSOLVE_OPERATION_ODE_IVP;
+    if (name == "define") return TEXSOLVE_OPERATION_DEFINE;
+    return -1;
+}
+
+bool stdin_is_terminal() { return _isatty(_fileno(stdin)) != 0; }
+
+}  // namespace
+
+int main(int argc, char **argv) {
+    texsolve_context *context = nullptr;
+    if (texsolve_context_create(&context) != TEXSOLVE_STATUS_OK) return 70;
+    bool debug = false;
+    bool force_repl = false;
+    std::string file;
+    std::vector<std::string> expressions;
+    int operation = TEXSOLVE_OPERATION_AUTO;
+    for (int index = 1; index < argc; ++index) {
+        const std::string_view argument(argv[index]);
+        if (argument == "-debug") debug = true;
+        else if (argument == "--repl") force_repl = true;
+        else if (argument == "-f" || argument == "--file") {
+            if (++index >= argc) {
+                texsolve_context_destroy(context);
+                return 2;
+            }
+            file = argv[index];
+        } else if (const int selected = operation_for(argument); selected >= 0 && expressions.empty()) {
+            operation = selected;
+        } else if (argument.starts_with("--")) {
+            texsolve_context_destroy(context);
+            return 2;
+        } else expressions.emplace_back(argument);
+    }
+    if (force_repl) {
+        if (!file.empty() || !expressions.empty()) {
+            texsolve_context_destroy(context);
+            return 2;
+        }
+        const int status = repl(context);
+        texsolve_context_destroy(context);
+        return status;
+    }
+    std::string input;
+    if (!file.empty()) {
+        if (!stdin_is_terminal() && std::cin.peek() != std::char_traits<char>::eof()) {
+            texsolve_context_destroy(context);
+            return 2;
+        }
+        std::ifstream stream(file, std::ios::binary);
+        if (!stream) {
+            std::cerr << "cannot open input file\n";
+            texsolve_context_destroy(context);
+            return 2;
+        }
+        input.assign(std::istreambuf_iterator<char>(stream), {});
+    } else if (!expressions.empty()) {
+        for (std::size_t index = 0; index < expressions.size(); ++index) {
+            if (index != 0) input.push_back(' ');
+            input += expressions[index];
+        }
+    } else {
+        if (stdin_is_terminal()) {
+            const int status = repl(context);
+            texsolve_context_destroy(context);
+            return status;
+        }
+        input.assign(std::istreambuf_iterator<char>(std::cin), {});
+        if (input.empty()) {
+            texsolve_context_destroy(context);
+            return 2;
+        }
+    }
+    const int status = execute(context, input, operation, debug);
+    texsolve_context_destroy(context);
+    return status;
 }

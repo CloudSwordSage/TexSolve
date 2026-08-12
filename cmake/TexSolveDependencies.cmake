@@ -1,5 +1,23 @@
 set(TEXSOLVE_THIRD_PARTY_ROOT "${PROJECT_SOURCE_DIR}/third_party")
 
+set(TEXSOLVE_THIRD_PARTY_ARCHIVES
+  boost/lib/libboost_program_options-mgw16-mt-s-x64-1_86.a
+  symengine/lib/libsymengine.a
+  ginac/lib/libginac.a
+  cln/lib/libcln.a
+  mpfr/lib/libmpfr.a
+  gmp/lib/libgmp.a
+  armadillo/lib/libarmadillo.a
+  openblas/lib/libopenblas.a
+  gsl/lib/libgsl.a
+  gsl/lib/libgslcblas.a
+  ceres/lib/libceres.a
+  nlopt/lib/libnlopt.a
+  sundials/lib/libsundials_cvode.a
+  sundials/lib/libsundials_nvecserial.a
+  sundials/lib/libsundials_sunnonlinsolfixedpoint.a
+  sundials/lib/libsundials_core.a)
+
 set(_texsolve_required_files
   boost/include/boost-1_86/boost/spirit/home/x3.hpp
   boost/lib/libboost_program_options-mgw16-mt-s-x64-1_86.a
@@ -42,9 +60,8 @@ if(_texsolve_missing_files)
   message(FATAL_ERROR "TexSolve offline dependencies are incomplete:\n  ${_texsolve_missing_text}")
 endif()
 
-add_library(texsolve_third_party INTERFACE)
-add_library(TexSolveThirdParty::all ALIAS texsolve_third_party)
-target_include_directories(texsolve_third_party SYSTEM INTERFACE
+add_library(TexSolveThirdParty::all INTERFACE IMPORTED GLOBAL)
+set_property(TARGET TexSolveThirdParty::all PROPERTY INTERFACE_INCLUDE_DIRECTORIES
   "${TEXSOLVE_THIRD_PARTY_ROOT}/boost/include/boost-1_86"
   "${TEXSOLVE_THIRD_PARTY_ROOT}/symengine/include"
   "${TEXSOLVE_THIRD_PARTY_ROOT}/ginac/include"
@@ -54,6 +71,7 @@ target_include_directories(texsolve_third_party SYSTEM INTERFACE
   "${TEXSOLVE_THIRD_PARTY_ROOT}/armadillo/include"
   "${TEXSOLVE_THIRD_PARTY_ROOT}/gsl/include"
   "${TEXSOLVE_THIRD_PARTY_ROOT}/ceres/include"
+  "${TEXSOLVE_THIRD_PARTY_ROOT}/ceres/include/ceres/internal/miniglog"
   "${TEXSOLVE_THIRD_PARTY_ROOT}/nlopt/include"
   "${TEXSOLVE_THIRD_PARTY_ROOT}/sundials/include"
   "${TEXSOLVE_THIRD_PARTY_ROOT}/openblas/include/openblas"
@@ -81,7 +99,7 @@ texsolve_import_archive(TexSolveThirdParty::sundials_fixedpoint sundials/lib/lib
 texsolve_import_archive(TexSolveThirdParty::openblas openblas/lib/libopenblas.a)
 texsolve_import_archive(TexSolveThirdParty::cln cln/lib/libcln.a)
 
-target_link_libraries(texsolve_third_party INTERFACE
+set_property(TARGET TexSolveThirdParty::all PROPERTY INTERFACE_LINK_LIBRARIES
   TexSolveThirdParty::boost_program_options
   TexSolveThirdParty::symengine TexSolveThirdParty::ginac TexSolveThirdParty::cln
   TexSolveThirdParty::mpfr TexSolveThirdParty::gmp
@@ -89,4 +107,5 @@ target_link_libraries(texsolve_third_party INTERFACE
   TexSolveThirdParty::gsl TexSolveThirdParty::gslcblas
   TexSolveThirdParty::ceres TexSolveThirdParty::nlopt
   TexSolveThirdParty::sundials_cvode TexSolveThirdParty::sundials_nvecserial
-  TexSolveThirdParty::sundials_fixedpoint TexSolveThirdParty::sundials_core)
+  TexSolveThirdParty::sundials_fixedpoint TexSolveThirdParty::sundials_core
+  stdc++ gfortran quadmath)

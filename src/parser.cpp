@@ -95,6 +95,7 @@ public:
                 output.ok = true;
                 output.root = std::move(*root);
                 render_node(output.root, 0, output.ast);
+                output.node_count = node_count_;
                 return output;
             }
         }
@@ -102,6 +103,7 @@ public:
         output.error_begin = offset_ + error_pos_;
         output.error_end = offset_ + std::min(input_.size(), error_pos_ + 1);
         output.diagnostic_code = diagnostic_code_;
+        output.node_count = node_count_;
         return output;
     }
 
@@ -170,6 +172,9 @@ private:
             if (!has_interval || clauses.size() < 4) {
                 return fail_node("ODE requires an interval and initial values", start, 12);
             }
+            if (!complete_ode_initials(clauses)) {
+                return fail_node("ODE requires every initial derivative value", start, 12);
+            }
             return make(NodeKind::Ode, "ivp", start, pos_, std::move(clauses));
         }
         return relation;
@@ -231,7 +236,12 @@ private:
         const std::size_t start = pos_;
         if (consume("+") || consume("-")) {
             const std::string op(1, input_[start]);
+            if (++depth_ > max_depth_) {
+                --depth_;
+                return fail_node("nesting limit exceeded", start, 15);
+            }
             auto child = parse_prefix();
+            --depth_;
             if (!child) return fail_node("missing unary operand", pos_);
             return make(NodeKind::Unary, op, start, child->end, {std::move(*child)});
         }
@@ -242,8 +252,14 @@ private:
         auto base = parse_postfix();
         if (!base) return std::nullopt;
         skip_space();
+        if (limit_target_ && (starts("^+") || starts("^-"))) return base;
         if (!consume("^")) return base;
+        if (++depth_ > max_depth_) {
+            --depth_;
+            return fail_node("nesting limit exceeded", pos_, 15);
+        }
         auto exponent = parse_prefix_or_group();
+        --depth_;
         if (!exponent) return fail_node("missing exponent", pos_);
         if (exponent->kind == NodeKind::Symbol && exponent->text == "T" &&
             (base->kind == NodeKind::Integer || base->kind == NodeKind::Real)) {
@@ -286,6 +302,7 @@ private:
             ++pos_;
             auto symbol = make(NodeKind::Symbol, std::string(input_.substr(start, 1)), start, pos_);
             if (!symbol) return std::nullopt;
+            while (consume("'")) symbol->text.push_back('\'');
             if (starts("(")) return parse_call(std::move(*symbol));
             return symbol;
         }
@@ -578,9 +595,14 @@ private:
         }
         const auto differential = input_.find("\\,d", pos_);
         if (differential == std::string_view::npos) return fail_node("integral requires a differential", pos_);
-        Parser body_parser(input_.substr(pos_, differential - pos_), max_depth_, max_nodes_ - node_count_, offset_ + pos_);
+        if (node_count_ >= max_nodes_) return fail_node("AST node limit exceeded", pos_, 16);
+        Parser body_parser(input_.substr(pos_, differential - pos_), max_depth_ - depth_,
+                           max_nodes_ - node_count_, offset_ + pos_);
         auto body_output = body_parser.run();
-        if (!body_output.ok) return fail_node(body_output.message, body_output.error_begin - offset_);
+        node_count_ += body_output.node_count;
+        if (!body_output.ok) {
+            return fail_node(body_output.message, body_output.error_begin - offset_, body_output.diagnostic_code);
+        }
         children.push_back(std::move(body_output.root));
         pos_ = differential + 3;
         const auto first_variable = parse_symbol_text();
@@ -604,13 +626,17 @@ private:
         if (!consume("_{")) return fail_node("limit requires a subscript", pos_);
         const auto variable = parse_symbol_text();
         if (!variable || !consume("\\to")) return fail_node("limit requires \\to", pos_);
+        limit_target_ = true;
         auto target = parse_expression();
+        limit_target_ = false;
         if (!target) return std::nullopt;
-        if (consume("^+") || consume("^-")) {}
+        std::string direction;
+        if (consume("^+")) direction = "+";
+        else if (consume("^-")) direction = "-";
         if (!consume("}")) return fail_node("unterminated limit subscript", pos_);
         auto body = parse_expression();
         if (!body) return std::nullopt;
-        return make(NodeKind::Limit, *variable, start, body->end,
+        return make(NodeKind::Limit, *variable + (direction.empty() ? "" : ":" + direction), start, body->end,
                     {std::move(*target), std::move(*body)});
     }
 
@@ -674,10 +700,15 @@ private:
         while (cursor < end) {
             const auto separator = input_.find("\\\\", cursor);
             const auto clause_end = separator == std::string_view::npos || separator > end ? end : separator;
-            Parser clause_parser(input_.substr(cursor, clause_end - cursor), max_depth_,
+            if (node_count_ >= max_nodes_) return fail_node("AST node limit exceeded", cursor, 16);
+            Parser clause_parser(input_.substr(cursor, clause_end - cursor), max_depth_ - depth_,
                                  max_nodes_ - node_count_, offset_ + cursor, true);
             auto clause = clause_parser.run();
-            if (!clause.ok || (clause.root.kind != NodeKind::Relation && clause.root.kind != NodeKind::Ode)) {
+            node_count_ += clause.node_count;
+            if (!clause.ok) {
+                return fail_node(clause.message, clause.error_begin - offset_, clause.diagnostic_code);
+            }
+            if (clause.root.kind != NodeKind::Relation && clause.root.kind != NodeKind::Ode) {
                 return fail_node("cases entries must be relations", cursor);
             }
             clauses.push_back(std::move(clause.root));
@@ -694,6 +725,9 @@ private:
             if (!upper || !consume("]")) return fail_node("invalid ODE interval", pos_);
             clauses.push_back(std::move(*lower));
             clauses.push_back(std::move(*upper));
+            if (!complete_ode_initials(clauses)) {
+                return fail_node("ODE requires every initial derivative value", start, 12);
+            }
             return make(NodeKind::Ode, *variable, start, pos_, std::move(clauses));
         }
         return make(NodeKind::Relation, "cases", start, pos_, std::move(clauses));
@@ -725,6 +759,37 @@ private:
         }
         pos_ = start;
         return std::nullopt;
+    }
+
+    bool complete_ode_initials(const std::vector<Node> &clauses) const {
+        std::vector<std::string> required;
+        std::vector<std::string> provided;
+        for (std::size_t index = 0; index + 2 < clauses.size(); ++index) {
+            const auto &clause = clauses[index];
+            if (clause.kind != NodeKind::Relation || clause.children.size() != 2) continue;
+            const auto &left = clause.children.front();
+            if (left.kind == NodeKind::Call) {
+                provided.push_back(left.text);
+                continue;
+            }
+            if (left.kind != NodeKind::Derivative) continue;
+            const auto separator = left.text.find('|');
+            const auto numerator = left.text.substr(0, separator);
+            unsigned order = 1;
+            std::size_t state_begin = 1;
+            if (numerator.starts_with("d^")) {
+                const auto state_position = numerator.find_first_not_of("0123456789", 2);
+                order = static_cast<unsigned>(std::stoul(numerator.substr(2, state_position - 2)));
+                state_begin = state_position;
+            }
+            const auto state = numerator.substr(state_begin);
+            for (unsigned derivative = 0; derivative < order; ++derivative) {
+                required.push_back(state + std::string(derivative, '\''));
+            }
+        }
+        return !required.empty() && std::all_of(required.begin(), required.end(), [&](const auto &name) {
+            return std::find(provided.begin(), provided.end(), name) != provided.end();
+        });
     }
 
     std::optional<std::string> extract_raw_group() {
@@ -824,6 +889,7 @@ private:
     std::size_t error_pos_ = 0;
     int32_t diagnostic_code_ = 3;
     bool allow_ode_clause_ = false;
+    bool limit_target_ = false;
 };
 
 }  // namespace
