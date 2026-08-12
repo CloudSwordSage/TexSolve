@@ -15,7 +15,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(cmake/TexSolveDependencies.cmake)
 
-add_library(texsolve_objects OBJECT src/texsolve.cpp)
+add_library(texsolve_objects OBJECT src/texsolve.cpp src/parser.cpp)
 set_target_properties(texsolve_objects PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(texsolve_objects
   PUBLIC
