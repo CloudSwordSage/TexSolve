@@ -2,6 +2,7 @@
 
 #include "internal.hpp"
 #include "evaluator.hpp"
+#include "solver.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -162,6 +163,18 @@ bool checked_add(std::size_t value, std::size_t &total) {
 void attach_metadata(texsolve_result &result, uint32_t precision) {
     result.metadata = make_node(TEXSOLVE_RESULT_METADATA);
     append_integer(*result.metadata, "precision_digits", precision);
+}
+
+std::unique_ptr<texsolve_result> from_solver(const texsolve::SolverNode &source) {
+    auto result = make_node(source.kind, source.name, source.exact);
+    result->approximation = source.approximation;
+    result->backend = source.backend;
+    for (const auto &child : source.children) result->children.push_back(from_solver(child));
+    if (!source.metadata.empty()) {
+        result->metadata = make_node(TEXSOLVE_RESULT_METADATA);
+        for (const auto &item : source.metadata) result->metadata->children.push_back(from_solver(item));
+    }
+    return result;
 }
 
 std::string source_of(std::string_view input, const texsolve::Node &node) {
@@ -357,7 +370,16 @@ texsolve_status TEXSOLVE_CALL texsolve_execute(
             else if (parsed.root.kind == texsolve::NodeKind::Integral) operation = TEXSOLVE_OPERATION_INTEGRATE;
             else if (parsed.root.kind == texsolve::NodeKind::Fold) {
                 operation = parsed.root.text.starts_with("sum") ? TEXSOLVE_OPERATION_SUM : TEXSOLVE_OPERATION_PRODUCT;
-            } else operation = TEXSOLVE_OPERATION_EVALUATE;
+            } else if (parsed.root.kind == texsolve::NodeKind::Matrix ||
+                       (parsed.root.kind == texsolve::NodeKind::Call &&
+                        (parsed.root.text == "det" || parsed.root.text == "rank" ||
+                         parsed.root.text == "inv" || parsed.root.text == "eigenvalues" ||
+                         parsed.root.text == "eigenvectors"))) {
+                operation = TEXSOLVE_OPERATION_LINEAR_ALGEBRA;
+            } else if (parsed.root.kind == texsolve::NodeKind::Relation) operation = TEXSOLVE_OPERATION_SOLVE;
+            else if (parsed.root.kind == texsolve::NodeKind::Optimization) operation = TEXSOLVE_OPERATION_OPTIMIZE;
+            else if (parsed.root.kind == texsolve::NodeKind::Ode) operation = TEXSOLVE_OPERATION_ODE_IVP;
+            else operation = TEXSOLVE_OPERATION_EVALUATE;
         }
         const uint32_t precision = request->precision_digits ? request->precision_digits : ctx->config.precision_digits;
         if (precision > 10000) {
@@ -366,6 +388,21 @@ texsolve_status TEXSOLVE_CALL texsolve_execute(
             error.diagnostic_code = TEXSOLVE_DIAGNOSTIC_PRECISION_LIMIT;
             *out = make_error(TEXSOLVE_STATUS_RESOURCE_LIMIT, error).release();
             return TEXSOLVE_STATUS_RESOURCE_LIMIT;
+        }
+        if (operation == TEXSOLVE_OPERATION_LINEAR_ALGEBRA || operation == TEXSOLVE_OPERATION_SOLVE ||
+            operation == TEXSOLVE_OPERATION_OPTIMIZE || operation == TEXSOLVE_OPERATION_ODE_IVP) {
+            const uint32_t iterations = request->max_iterations ? request->max_iterations : ctx->config.max_iterations;
+            const uint32_t deadline = request->deadline_ms ? request->deadline_ms : ctx->config.deadline_ms;
+            auto solved = texsolve::solve_problem(parsed.root, operation, bindings, iterations, deadline);
+            if (solved.status != TEXSOLVE_STATUS_OK) {
+                texsolve::ParseOutput error;
+                error.message = solved.message;
+                error.diagnostic_code = solved.diagnostic_code;
+                *out = make_error(solved.status, error).release();
+                return solved.status;
+            }
+            *out = from_solver(solved.root).release();
+            return TEXSOLVE_STATUS_OK;
         }
         auto evaluated = texsolve::evaluate(parsed.root, operation, request->symbolic_backend,
                                             bindings, precision);
