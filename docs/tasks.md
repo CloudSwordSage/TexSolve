@@ -4,13 +4,13 @@
 
 ## 1. 构建与 ABI 基线
 
-- [ ] **TASK-001 建立 CMake 目标与离线依赖导入**
+- [x] **TASK-001 建立 CMake 目标与离线依赖导入**
   - 生成 shared、static、CLI 和测试目标，只使用 `third_party/`。
   - 配置时一次报告全部缺失头/库。
   - 验证：Release 配置和空实现链接成功。
   - _需求：REQ-014；组件：CMake/安装_
 
-- [ ] **TASK-002 实现公开 C 头与生命周期骨架**
+- [x] **TASK-002 实现公开 C 头与生命周期骨架**
   - 实现 ABI 1 的枚举、结构、context/result 创建销毁和异常屏障。
   - 验证：C/C++ ABI smoke test，静态与动态 consumer 均通过。
   - _需求：REQ-010、REQ-012；组件：COMP-1、COMP-9_
