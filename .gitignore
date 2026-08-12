@@ -6,5 +6,7 @@
 tmp/
 third_party/
 build/
+build_gcc/
+build_consumer/
 
 codegraph.json
