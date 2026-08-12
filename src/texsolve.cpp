@@ -1,10 +1,14 @@
 #include <texsolve/texsolve.h>
 
+#include "internal.hpp"
+
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <map>
 #include <new>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -29,6 +33,11 @@ struct DiagnosticStorage {
     size_t begin_byte = 0;
     size_t end_byte = 0;
     std::string message;
+};
+
+struct Definition {
+    std::vector<std::string> parameters;
+    std::string body;
 };
 
 constexpr bool in_range(uint32_t value, uint32_t maximum) {
@@ -70,6 +79,8 @@ struct texsolve_result {
 
 struct texsolve_context {
     Config config;
+    std::map<std::string, std::string> variables;
+    std::map<std::string, Definition> functions;
 };
 
 namespace {
@@ -90,27 +101,59 @@ const char *backend_name(int32_t value, const char *first, const char *second) {
     return value == 0 ? "auto" : (value == 1 ? first : second);
 }
 
-std::unique_ptr<texsolve_result> make_snapshot(const Config &config) {
+std::unique_ptr<texsolve_result> make_snapshot(const texsolve_context &context) {
     auto root = make_node(TEXSOLVE_RESULT_MAPPING);
-    root->children.push_back(make_node(TEXSOLVE_RESULT_MAPPING, "variables"));
-    root->children.push_back(make_node(TEXSOLVE_RESULT_MAPPING, "functions"));
+    auto variables = make_node(TEXSOLVE_RESULT_MAPPING, "variables");
+    for (const auto &[name, value] : context.variables) {
+        variables->children.push_back(make_node(TEXSOLVE_RESULT_SYMBOLIC, name, value));
+    }
+    root->children.push_back(std::move(variables));
+    auto functions = make_node(TEXSOLVE_RESULT_MAPPING, "functions");
+    for (const auto &[name, definition] : context.functions) {
+        auto function = make_node(TEXSOLVE_RESULT_MAPPING, name);
+        auto parameters = make_node(TEXSOLVE_RESULT_LIST, "parameters");
+        for (const auto &parameter : definition.parameters) {
+            parameters->children.push_back(make_node(TEXSOLVE_RESULT_SYMBOLIC, {}, parameter));
+        }
+        function->children.push_back(std::move(parameters));
+        function->children.push_back(make_node(TEXSOLVE_RESULT_SYMBOLIC, "body", definition.body));
+        functions->children.push_back(std::move(function));
+    }
+    root->children.push_back(std::move(functions));
     auto settings = make_node(TEXSOLVE_RESULT_MAPPING, "config");
-    append_integer(*settings, "precision_digits", config.precision_digits);
-    append_integer(*settings, "max_iterations", config.max_iterations);
-    append_integer(*settings, "deadline_ms", config.deadline_ms);
-    append_integer(*settings, "max_input_bytes", config.max_input_bytes);
-    append_integer(*settings, "max_nesting_depth", config.max_nesting_depth);
-    append_integer(*settings, "max_ast_nodes", config.max_ast_nodes);
+    append_integer(*settings, "precision_digits", context.config.precision_digits);
+    append_integer(*settings, "max_iterations", context.config.max_iterations);
+    append_integer(*settings, "deadline_ms", context.config.deadline_ms);
+    append_integer(*settings, "max_input_bytes", context.config.max_input_bytes);
+    append_integer(*settings, "max_nesting_depth", context.config.max_nesting_depth);
+    append_integer(*settings, "max_ast_nodes", context.config.max_ast_nodes);
     settings->children.push_back(make_node(TEXSOLVE_RESULT_SYMBOLIC, "symbolic_backend",
-                                           backend_name(config.symbolic_backend, "symengine", "ginac")));
+                                           backend_name(context.config.symbolic_backend, "symengine", "ginac")));
     settings->children.push_back(make_node(TEXSOLVE_RESULT_SYMBOLIC, "linear_algebra_backend",
-                                           backend_name(config.linear_algebra_backend, "eigen", "armadillo")));
+                                           backend_name(context.config.linear_algebra_backend, "eigen", "armadillo")));
     settings->children.push_back(make_node(TEXSOLVE_RESULT_SYMBOLIC, "integration_backend",
-                                           backend_name(config.integration_backend, "gsl", "boost_math")));
+                                           backend_name(context.config.integration_backend, "gsl", "boost_math")));
     settings->children.push_back(make_node(TEXSOLVE_RESULT_SYMBOLIC, "optimization_backend",
-                                           backend_name(config.optimization_backend, "ceres", "nlopt")));
+                                           backend_name(context.config.optimization_backend, "ceres", "nlopt")));
     root->children.push_back(std::move(settings));
     return root;
+}
+
+std::unique_ptr<texsolve_result> make_error(texsolve_status status, const texsolve::ParseOutput &parsed) {
+    auto result = make_node(TEXSOLVE_RESULT_NONE);
+    result->status = status;
+    result->diagnostics.push_back({TEXSOLVE_SEVERITY_ERROR, parsed.diagnostic_code,
+                                   parsed.error_begin, parsed.error_end, parsed.message});
+    return result;
+}
+
+bool valid_view(texsolve_string_view view) {
+    return view.data != nullptr || view.size == 0;
+}
+
+std::string source_of(std::string_view input, const texsolve::Node &node) {
+    if (node.end < node.begin || node.end > input.size()) return {};
+    return std::string(input.substr(node.begin, node.end - node.begin));
 }
 
 }  // namespace
@@ -164,7 +207,7 @@ texsolve_status TEXSOLVE_CALL texsolve_context_snapshot(
     *out = nullptr;
     if (ctx == nullptr) return TEXSOLVE_STATUS_INVALID_ARGUMENT;
     try {
-        *out = make_snapshot(ctx->config).release();
+        *out = make_snapshot(*ctx).release();
         return TEXSOLVE_STATUS_OK;
     } catch (...) {
         return TEXSOLVE_STATUS_INTERNAL_ERROR;
@@ -172,13 +215,80 @@ texsolve_status TEXSOLVE_CALL texsolve_context_snapshot(
 }
 
 texsolve_status TEXSOLVE_CALL texsolve_context_reset(texsolve_context *ctx) {
-    return ctx == nullptr ? TEXSOLVE_STATUS_INVALID_ARGUMENT : TEXSOLVE_STATUS_OK;
+    if (ctx == nullptr) return TEXSOLVE_STATUS_INVALID_ARGUMENT;
+    ctx->variables.clear();
+    ctx->functions.clear();
+    return TEXSOLVE_STATUS_OK;
 }
 
 texsolve_status TEXSOLVE_CALL texsolve_execute(
-    texsolve_context *, const texsolve_request *, texsolve_result **out) {
-    if (out != nullptr) *out = nullptr;
-    return TEXSOLVE_STATUS_UNSUPPORTED;
+    texsolve_context *ctx, const texsolve_request *request, texsolve_result **out) {
+    if (out == nullptr) return TEXSOLVE_STATUS_INVALID_ARGUMENT;
+    *out = nullptr;
+    if (ctx == nullptr || request == nullptr) return TEXSOLVE_STATUS_INVALID_ARGUMENT;
+    if (request->struct_size < TEXSOLVE_REQUEST_V1_SIZE || request->abi_version != TEXSOLVE_ABI_VERSION) {
+        return TEXSOLVE_STATUS_ABI_MISMATCH;
+    }
+    if (!valid_view(request->latex)) return TEXSOLVE_STATUS_INVALID_ARGUMENT;
+    if (request->operation < TEXSOLVE_OPERATION_AUTO || request->operation > TEXSOLVE_OPERATION_DEFINE) {
+        return TEXSOLVE_STATUS_INVALID_ARGUMENT;
+    }
+    const uint32_t input_limit = request->max_input_bytes ? request->max_input_bytes : ctx->config.max_input_bytes;
+    if (request->latex.size > input_limit) {
+        texsolve::ParseOutput error;
+        error.message = "input byte limit exceeded";
+        error.diagnostic_code = TEXSOLVE_DIAGNOSTIC_INPUT_LIMIT;
+        *out = make_error(TEXSOLVE_STATUS_RESOURCE_LIMIT, error).release();
+        return TEXSOLVE_STATUS_RESOURCE_LIMIT;
+    }
+    try {
+        const std::string_view latex(request->latex.data, request->latex.size);
+        const uint32_t nesting = request->max_nesting_depth ? request->max_nesting_depth : ctx->config.max_nesting_depth;
+        const uint32_t nodes = request->max_ast_nodes ? request->max_ast_nodes : ctx->config.max_ast_nodes;
+        auto parsed = texsolve::parse_for_debug(latex, nesting, nodes);
+        if (!parsed.ok) {
+            const texsolve_status status = parsed.diagnostic_code == TEXSOLVE_DIAGNOSTIC_INVALID_UTF8
+                                               ? TEXSOLVE_STATUS_INVALID_UTF8
+                                               : (parsed.diagnostic_code == TEXSOLVE_DIAGNOSTIC_DUPLICATE_NAME
+                                                      ? TEXSOLVE_STATUS_SEMANTIC_ERROR
+                                                      : TEXSOLVE_STATUS_PARSE_ERROR);
+            *out = make_error(status, parsed).release();
+            return status;
+        }
+        const bool definition = parsed.root.kind == texsolve::NodeKind::Definition;
+        if ((request->operation == TEXSOLVE_OPERATION_DEFINE && !definition) ||
+            (request->operation != TEXSOLVE_OPERATION_AUTO &&
+             request->operation != TEXSOLVE_OPERATION_DEFINE && definition)) {
+            parsed.message = "explicit operation conflicts with request syntax";
+            parsed.diagnostic_code = TEXSOLVE_DIAGNOSTIC_OPERATION_CONFLICT;
+            parsed.error_begin = 0;
+            parsed.error_end = request->latex.size;
+            *out = make_error(TEXSOLVE_STATUS_OPERATION_MISMATCH, parsed).release();
+            return TEXSOLVE_STATUS_OPERATION_MISMATCH;
+        }
+
+        auto result = make_node(TEXSOLVE_RESULT_SYMBOLIC, {}, std::string(latex));
+        if (definition) {
+            const auto &target = parsed.root.children[0];
+            const auto &body = parsed.root.children[1];
+            if (target.kind == texsolve::NodeKind::Symbol) {
+                ctx->variables[target.text] = source_of(latex, body);
+                ctx->functions.erase(target.text);
+                result->name = target.text;
+            } else {
+                Definition value;
+                for (const auto &parameter : target.children) value.parameters.push_back(parameter.text);
+                value.body = source_of(latex, body);
+                ctx->functions[target.text] = std::move(value);
+                ctx->variables.erase(target.text);
+                result->name = target.text;
+            }
+        }
+        *out = result.release();
+        return TEXSOLVE_STATUS_OK;
+    } catch (...) {
+        return TEXSOLVE_STATUS_INTERNAL_ERROR;
+    }
 }
 
 void TEXSOLVE_CALL texsolve_result_destroy(texsolve_result *result) { delete result; }
