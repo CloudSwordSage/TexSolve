@@ -1,0 +1,42 @@
+#ifndef TEXSOLVE_EVALUATOR_HPP
+#define TEXSOLVE_EVALUATOR_HPP
+
+#include "internal.hpp"
+
+#include <cstdint>
+#include <map>
+#include <string>
+
+namespace texsolve {
+
+struct Evaluation {
+    int32_t status = 0;
+    int32_t kind = 0;
+    int32_t diagnostic_code = 0;
+    std::string exact;
+    std::string approximation;
+    std::string backend;
+    std::string message;
+};
+
+/**
+ * Evaluate a validated AST through the selected symbolic backend.
+ *
+ * Args:
+ *     root: Validated immutable request AST.
+ *     operation: Public operation constant.
+ *     symbolic_backend: AUTO, SymEngine, or GiNaC.
+ *     bindings: Validated binding expressions keyed by symbol name.
+ *     precision_digits: Requested decimal precision.
+ * Returns:
+ *     Backend-independent exact/approximate result data or a stable failure.
+ */
+Evaluation evaluate(const Node &root, int32_t operation, int32_t symbolic_backend,
+                    const std::map<std::string, Node> &bindings, uint32_t precision_digits);
+
+/** Render a scalar AST into the common backend expression syntax. */
+std::string to_backend_syntax(const Node &node);
+
+}  // namespace texsolve
+
+#endif

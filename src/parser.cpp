@@ -582,11 +582,19 @@ private:
         if (!body_output.ok) return fail_node(body_output.message, body_output.error_begin - offset_);
         children.push_back(std::move(body_output.root));
         pos_ = differential + 3;
-        if (!parse_symbol_text()) return fail_node("invalid differential variable", pos_);
+        const auto first_variable = parse_symbol_text();
+        if (!first_variable) return fail_node("invalid differential variable", pos_);
+        std::string variables = *first_variable;
         if (twice) {
-            if (!consume("\\,d") || !parse_symbol_text()) return fail_node("double integral requires two differentials", pos_);
+            if (!consume("\\,d")) return fail_node("double integral requires two differentials", pos_);
+            const auto second_variable = parse_symbol_text();
+            if (!second_variable || *second_variable == *first_variable) {
+                return fail_node("double integral requires distinct differentials", pos_);
+            }
+            variables += "," + *second_variable;
         }
-        return make(NodeKind::Integral, twice ? "iint" : "int", start, pos_, std::move(children));
+        return make(NodeKind::Integral, (twice ? "iint:" : "int:") + variables,
+                    start, pos_, std::move(children));
     }
 
     std::optional<Node> parse_limit() {

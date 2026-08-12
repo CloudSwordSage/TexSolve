@@ -15,7 +15,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(cmake/TexSolveDependencies.cmake)
 
-add_library(texsolve_objects OBJECT src/texsolve.cpp src/parser.cpp)
+add_library(texsolve_objects OBJECT src/texsolve.cpp src/parser.cpp src/evaluator.cpp)
 set_target_properties(texsolve_objects PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(texsolve_objects
   PUBLIC
@@ -35,6 +35,8 @@ set_target_properties(texsolve_static PROPERTIES OUTPUT_NAME texsolve_static EXP
 target_include_directories(texsolve_shared PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 target_include_directories(texsolve_static PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 target_compile_definitions(texsolve_static INTERFACE TEXSOLVE_STATIC)
+target_link_libraries(texsolve_shared PRIVATE TexSolveThirdParty::all)
+target_link_libraries(texsolve_static PUBLIC "$<BUILD_INTERFACE:TexSolveThirdParty::all>")
 
 if(TEXSOLVE_BUILD_CLI)
   add_executable(texsolve_cli src/cli.cpp)
