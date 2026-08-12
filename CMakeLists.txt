@@ -36,12 +36,15 @@ target_include_directories(texsolve_shared PUBLIC "$<BUILD_INTERFACE:${PROJECT_S
 target_include_directories(texsolve_static PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 target_compile_definitions(texsolve_static INTERFACE TEXSOLVE_STATIC)
 target_link_libraries(texsolve_shared PRIVATE TexSolveThirdParty::all)
-target_link_libraries(texsolve_static PUBLIC "$<BUILD_INTERFACE:TexSolveThirdParty::all>")
+target_link_libraries(texsolve_static PUBLIC
+  "$<BUILD_INTERFACE:TexSolveThirdParty::all>"
+  "$<INSTALL_INTERFACE:TexSolveThirdParty::all>")
 
 if(TEXSOLVE_BUILD_CLI)
-  add_executable(texsolve_cli src/cli.cpp)
+  add_executable(texsolve_cli src/cli.cpp src/parser.cpp)
   set_target_properties(texsolve_cli PROPERTIES OUTPUT_NAME texsolve)
-  target_link_libraries(texsolve_cli PRIVATE TexSolve::shared)
+  target_link_libraries(texsolve_cli PRIVATE TexSolve::shared TexSolveThirdParty::all)
+  target_include_directories(texsolve_cli PRIVATE "${PROJECT_SOURCE_DIR}/src")
   target_compile_options(texsolve_cli PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
@@ -60,6 +63,13 @@ if(TEXSOLVE_ENABLE_INSTALL)
     install(TARGETS texsolve_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
   endif()
   install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  set(TEXSOLVE_ARCHIVE_FILENAMES)
+  foreach(_archive IN LISTS TEXSOLVE_THIRD_PARTY_ARCHIVES)
+    list(APPEND _texsolve_archive_sources "${TEXSOLVE_THIRD_PARTY_ROOT}/${_archive}")
+    get_filename_component(_archive_name "${_archive}" NAME)
+    list(APPEND TEXSOLVE_ARCHIVE_FILENAMES "${_archive_name}")
+  endforeach()
+  install(FILES ${_texsolve_archive_sources} DESTINATION ${CMAKE_INSTALL_LIBDIR}/texsolve)
   install(EXPORT TexSolveTargets NAMESPACE TexSolve:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/TexSolve)
   configure_package_config_file(cmake/TexSolveConfig.cmake.in
     "${PROJECT_BINARY_DIR}/TexSolveConfig.cmake"

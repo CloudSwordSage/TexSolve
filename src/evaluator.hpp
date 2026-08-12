@@ -17,6 +17,13 @@ struct Evaluation {
     std::string approximation;
     std::string backend;
     std::string message;
+    std::string error_estimate;
+    std::string name;
+    uint32_t precision_digits = 0;
+    int32_t real_kind = 0;
+    int32_t imag_kind = 0;
+    std::string real;
+    std::string imag;
 };
 
 /**
@@ -28,11 +35,15 @@ struct Evaluation {
  *     symbolic_backend: AUTO, SymEngine, or GiNaC.
  *     bindings: Validated binding expressions keyed by symbol name.
  *     precision_digits: Requested decimal precision.
+ *     max_iterations: Maximum finite-fold term count.
+ *     deadline_ms: Remaining cooperative deadline budget.
+ *     integration_backend: AUTO, GSL, or Boost.Math for numeric definite integrals.
  * Returns:
  *     Backend-independent exact/approximate result data or a stable failure.
  */
 Evaluation evaluate(const Node &root, int32_t operation, int32_t symbolic_backend,
-                    const std::map<std::string, Node> &bindings, uint32_t precision_digits);
+                    const std::map<std::string, Node> &bindings, uint32_t precision_digits,
+                    uint32_t max_iterations, uint32_t deadline_ms, int32_t integration_backend);
 
 /** Render a scalar AST into the common backend expression syntax. */
 std::string to_backend_syntax(const Node &node);

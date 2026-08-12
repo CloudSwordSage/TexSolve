@@ -43,6 +43,7 @@ struct ParseOutput {
     std::size_t error_begin = 0;
     std::size_t error_end = 0;
     int32_t diagnostic_code = 3;
+    uint32_t node_count = 0;
 };
 
 /**

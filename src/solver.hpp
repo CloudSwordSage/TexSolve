@@ -36,12 +36,22 @@ struct SolverOutput {
  *     bindings: Initial values keyed by variable name.
  *     max_iterations: Iteration budget.
  *     deadline_ms: Cooperative deadline budget.
+ *     linear_backend: AUTO, Eigen, or Armadillo.
+ *     optimization_backend: AUTO, Ceres, or NLopt.
+ *     optimization_kind: GENERAL or LEAST_SQUARES.
+ *     residuals: Validated least-squares residual expressions.
+ *     lower_bounds: Optional lower bound per variable.
+ *     upper_bounds: Optional upper bound per variable.
  * Returns:
  *     Backend-neutral structured result or stable failure information.
  */
 SolverOutput solve_problem(const Node &root, int32_t operation,
                            const std::map<std::string, Node> &bindings,
-                           uint32_t max_iterations, uint32_t deadline_ms);
+                           uint32_t max_iterations, uint32_t deadline_ms,
+                           int32_t linear_backend, int32_t optimization_backend,
+                           int32_t optimization_kind, const std::vector<Node> &residuals,
+                           const std::map<std::string, Node> &lower_bounds,
+                           const std::map<std::string, Node> &upper_bounds);
 
 }  // namespace texsolve
 

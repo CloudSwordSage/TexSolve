@@ -1,4 +1,15 @@
 @PACKAGE_INIT@
 
+if(NOT TARGET TexSolveThirdParty::all)
+  add_library(TexSolveThirdParty::all INTERFACE IMPORTED)
+  set(_texsolve_archives)
+  foreach(_archive IN ITEMS @TEXSOLVE_ARCHIVE_FILENAMES@)
+    list(APPEND _texsolve_archives "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/texsolve/${_archive}")
+  endforeach()
+  list(APPEND _texsolve_archives stdc++ gfortran quadmath)
+  set_property(TARGET TexSolveThirdParty::all PROPERTY INTERFACE_LINK_LIBRARIES "${_texsolve_archives}")
+  unset(_texsolve_archives)
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/TexSolveTargets.cmake")
 check_required_components(TexSolve)

@@ -22,6 +22,7 @@ BOOST_AUTO_TEST_CASE(accepts_documented_whitelist_examples) {
         R"(\begin{cases}x+y=2\\x-y=0\end{cases})", "x^2\\le 4",
         R"(\min_{x,y}{(x-1)^2+y^2})", R"(\min_{x}{x^2},\;x\ge 1)",
         R"(\frac{dy}{dt}=y,\;y(0)=1,\;t\in[0,1])",
+        R"(\frac{d^2y}{dt^2}=-y,\;y(0)=0,\;y'(0)=1,\;t\in[0,1])",
         R"(\begin{bmatrix}1&0\\0&1\end{bmatrix})"};
     for (const auto input : inputs) {
         const auto parsed = texsolve::parse_for_debug(input, 128, 50000);
@@ -43,6 +44,7 @@ BOOST_AUTO_TEST_CASE(rejects_documented_invalid_examples) {
         R"(\begin{pmatrix}1&2\\3\end{pmatrix})", R"(\det{x})", "2^{T}",
         "x^2==4", R"(\begin{cases}x+y\end{cases})", "x<>2", R"(\min{})",
         R"(\min_{x}{x^2},\;x)", R"(\frac{dy}{dt}=y)", R"(\newcommand{x}{1})",
+        R"(\frac{d^2y}{dt^2}=-y,\;y(0)=0,\;t\in[0,1])",
         "x+1 trailing"};
     for (const auto input : inputs) {
         const auto parsed = texsolve::parse_for_debug(input, 128, 50000);
@@ -59,4 +61,8 @@ BOOST_AUTO_TEST_CASE(emits_deterministic_spans_and_honors_limits) {
     BOOST_TEST(parsed.ast.find("Binary [0,5) +") != std::string::npos);
     BOOST_TEST(!texsolve::parse_for_debug("((((x))))", 2, 50000).ok);
     BOOST_TEST(!texsolve::parse_for_debug("1+2+3", 128, 3).ok);
+    BOOST_TEST(!texsolve::parse_for_debug(std::string(200, '-') + "1", 32, 50000).ok);
+    BOOST_TEST(!texsolve::parse_for_debug(R"(\begin{cases}x=1\\y=2\end{cases})", 128, 5).ok);
+    BOOST_TEST(!texsolve::parse_for_debug(R"((\int (x)\,dx))", 1, 50000).ok);
+    BOOST_TEST(!texsolve::parse_for_debug(R"((\begin{cases}(x)=1\end{cases}))", 1, 50000).ok);
 }
