@@ -38,6 +38,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace texsolve {
@@ -45,6 +46,48 @@ namespace {
 
 using SymEngine::Basic;
 using SymEngine::RCP;
+
+/** Convert a finite decimal literal to exact backend arithmetic. */
+std::string exact_real_syntax(std::string_view value) {
+    const auto exponent = value.find_first_of("eE");
+    const auto mantissa = value.substr(0, exponent);
+    const auto point = mantissa.find('.');
+    std::string digits(mantissa);
+    if (point != std::string_view::npos) digits.erase(point, 1);
+    const auto first_nonzero = digits.find_first_not_of('0');
+    digits = first_nonzero == std::string::npos ? "0" : digits.substr(first_nonzero);
+    const std::size_t decimal_places = point == std::string_view::npos ? 0 : mantissa.size() - point - 1;
+    std::string result = decimal_places == 0
+                             ? digits
+                             : "(" + digits + "/10^" + std::to_string(decimal_places) + ")";
+    if (exponent != std::string_view::npos) {
+        result = "(" + result + "*10^(" + std::string(value.substr(exponent + 1)) + "))";
+    }
+    return result;
+}
+
+/** Return whether two AST subtrees represent the same expression, ignoring source spans. */
+bool same_expression(const Node &left, const Node &right) {
+    if (left.kind != right.kind || left.text != right.text || left.children.size() != right.children.size()) {
+        return false;
+    }
+    for (std::size_t index = 0; index < left.children.size(); ++index) {
+        if (!same_expression(left.children[index], right.children[index])) return false;
+    }
+    return true;
+}
+
+/** Find the real symbol squared by a multiplication or power node. */
+const Node *real_symbol_square_base(const Node &node) {
+    if (node.kind != NodeKind::Binary || node.children.size() != 2) return nullptr;
+    const bool product = node.text == "*" || node.text == "implicit" ||
+                         node.text == "\\cdot" || node.text == "\\times";
+    const Node *base = nullptr;
+    if (product && same_expression(node.children[0], node.children[1])) base = &node.children[0];
+    if (node.text == "^" && node.children[1].kind == NodeKind::Integer &&
+        node.children[1].text == "2") base = &node.children[0];
+    return base != nullptr && base->kind == NodeKind::Symbol && base->text != "i" ? base : nullptr;
+}
 
 std::string symbol_name(std::string value) {
     if (value == "\\pi") return "pi";
@@ -106,7 +149,7 @@ void assign_symengine_scalar(Evaluation &result, const Basic &expression, uint32
 Evaluation failure(int32_t status, int32_t code, std::string message, std::string backend = {});
 
 RCP<const Basic> symengine_expression(const Node &node, const std::map<std::string, Node> &bindings) {
-    auto expression = SymEngine::parse(to_backend_syntax(node));
+    auto expression = SymEngine::parse(to_backend_syntax(node, &bindings));
     SymEngine::map_basic_basic substitutions;
     for (const auto &[name, value] : bindings) {
         substitutions[SymEngine::symbol(symbol_name(name))] = SymEngine::parse(to_backend_syntax(value));
@@ -314,9 +357,8 @@ std::optional<RCP<const Basic>> scalar_expression(
                         "finite fold deadline exceeded", "symengine");
         return std::nullopt;
     }
-    if (node.kind == NodeKind::Integer || node.kind == NodeKind::Real) {
-        return SymEngine::parse(node.text);
-    }
+    if (node.kind == NodeKind::Integer) return SymEngine::parse(node.text);
+    if (node.kind == NodeKind::Real) return SymEngine::parse(exact_real_syntax(node.text));
     if (node.kind == NodeKind::Symbol) {
         if (const auto local = locals.find(node.text); local != locals.end()) return local->second;
         if (const auto binding = bindings.find(node.text); binding != bindings.end()) {
@@ -393,6 +435,24 @@ std::optional<RCP<const Basic>> scalar_expression(
         return SymEngine::mul(*left, *right);
     }
     if (node.kind == NodeKind::Call) {
+        if (node.text == "sqrt:2" && node.children.size() == 1) {
+            const Node &radicand = node.children.front();
+            const Node *base = real_symbol_square_base(radicand);
+            const Node *numerator = nullptr;
+            if (radicand.kind == NodeKind::Binary &&
+                (radicand.text == "/" || radicand.text == "frac")) {
+                base = real_symbol_square_base(radicand.children[1]);
+                numerator = &radicand.children[0];
+            }
+            if (base != nullptr && !bindings.contains(base->text)) {
+                const auto absolute = SymEngine::parse("abs(" + symbol_name(base->text) + ")");
+                if (numerator == nullptr) return absolute;
+                auto radicand_value = scalar_expression(*numerator, bindings, locals, max_iterations,
+                                                        iterations, deadline, error);
+                if (!radicand_value) return std::nullopt;
+                return SymEngine::div(SymEngine::sqrt(*radicand_value), absolute);
+            }
+        }
         std::string expression = node.text.starts_with("sqrt:") ? "(" : node.text + "(";
         for (std::size_t index = 0; index < node.children.size(); ++index) {
             auto argument = scalar_expression(node.children[index], bindings, locals, max_iterations,
@@ -556,7 +616,7 @@ Evaluation evaluate_ginac(const Node &root, int32_t operation,
         derivative_variable = variable_from_derivative(root.text);
     }
     GiNaC::parser parser;
-    GiNaC::ex expression = parser(to_backend_syntax(*expression_node));
+    GiNaC::ex expression = parser(to_backend_syntax(*expression_node, &bindings));
     for (const auto &[name, value] : bindings) {
         expression = expression.subs(parser(symbol_name(name)) == parser(to_backend_syntax(value)));
     }
@@ -603,25 +663,45 @@ Evaluation evaluate_ginac(const Node &root, int32_t operation,
 
 }  // namespace
 
-std::string to_backend_syntax(const Node &node) {
+std::string to_backend_syntax(const Node &node,
+                              const std::map<std::string, Node> *real_bindings) {
     switch (node.kind) {
         case NodeKind::Integer:
-        case NodeKind::Real: return node.text;
+            return node.text;
+        case NodeKind::Real:
+            return exact_real_syntax(node.text);
         case NodeKind::Symbol: return symbol_name(node.text);
-        case NodeKind::Unary: return "(" + node.text + to_backend_syntax(node.children.front()) + ")";
+        case NodeKind::Unary: return "(" + node.text + to_backend_syntax(node.children.front(), real_bindings) + ")";
         case NodeKind::Binary: {
             const std::string op = node.text == "frac" ? "/" :
                                    (node.text == "implicit" || node.text == "\\cdot" || node.text == "\\times") ? "*" : node.text;
-            return "(" + to_backend_syntax(node.children[0]) + op + to_backend_syntax(node.children[1]) + ")";
+            return "(" + to_backend_syntax(node.children[0], real_bindings) + op +
+                   to_backend_syntax(node.children[1], real_bindings) + ")";
         }
         case NodeKind::Call: {
             if (node.text.starts_with("sqrt:")) {
-                return "(" + to_backend_syntax(node.children.front()) + ")^(1/" + node.text.substr(5) + ")";
+                if (node.text == "sqrt:2") {
+                    const Node &radicand = node.children.front();
+                    if (const Node *base = real_symbol_square_base(radicand);
+                        base != nullptr && real_bindings != nullptr && !real_bindings->contains(base->text)) {
+                        return "abs(" + to_backend_syntax(*base, real_bindings) + ")";
+                    }
+                    if (radicand.kind == NodeKind::Binary &&
+                        (radicand.text == "/" || radicand.text == "frac")) {
+                        if (const Node *base = real_symbol_square_base(radicand.children[1]);
+                            base != nullptr && real_bindings != nullptr && !real_bindings->contains(base->text)) {
+                            return "((" + to_backend_syntax(radicand.children[0], real_bindings) +
+                                   ")^(1/2)/abs(" + to_backend_syntax(*base, real_bindings) + "))";
+                        }
+                    }
+                }
+                return "(" + to_backend_syntax(node.children.front(), real_bindings) + ")^(1/" +
+                       node.text.substr(5) + ")";
             }
             std::string result = node.text + "(";
             for (std::size_t index = 0; index < node.children.size(); ++index) {
                 if (index != 0) result += ',';
-                result += to_backend_syntax(node.children[index]);
+                result += to_backend_syntax(node.children[index], real_bindings);
             }
             return result + ')';
         }

@@ -45,8 +45,18 @@ Evaluation evaluate(const Node &root, int32_t operation, int32_t symbolic_backen
                     const std::map<std::string, Node> &bindings, uint32_t precision_digits,
                     uint32_t max_iterations, uint32_t deadline_ms, int32_t integration_backend);
 
-/** Render a scalar AST into the common backend expression syntax. */
-std::string to_backend_syntax(const Node &node);
+/**
+ * Render a scalar AST into the common backend expression syntax.
+ *
+ * Args:
+ *     node: Scalar AST to render.
+ *     real_bindings: When non-null, unbound ordinary symbols use real-domain
+ *         root identities; bound symbols retain the value's actual domain.
+ * Returns:
+ *     Backend expression syntax.
+ */
+std::string to_backend_syntax(const Node &node,
+                              const std::map<std::string, Node> *real_bindings = nullptr);
 
 }  // namespace texsolve
 

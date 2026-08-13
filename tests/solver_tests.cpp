@@ -221,15 +221,49 @@ BOOST_AUTO_TEST_CASE(symbolic_equations_use_general_solver_before_numeric_fallba
     auto *trigonometric = run(context, R"(\sin{x}=0)", TEXSOLVE_OPERATION_SOLVE);
     BOOST_REQUIRE_EQUAL(texsolve_result_child_count(trigonometric), 1u);
     const auto *family = texsolve_result_child(texsolve_result_child(trigonometric, 0), 0);
-    BOOST_TEST(text(texsolve_result_exact_latex(family)).find(R"(\pi)") != std::string::npos);
+    BOOST_TEST(text(texsolve_result_exact_latex(family)) == R"(n \pi)");
+    const auto *trig_domain = named_child(texsolve_result_metadata(trigonometric), "domain");
+    BOOST_REQUIRE(trig_domain != nullptr);
+    BOOST_TEST(text(texsolve_result_exact_latex(trig_domain)) == R"(n \in \mathbb{Z})");
     BOOST_TEST(text(texsolve_result_exact_latex(
         texsolve_result_child(texsolve_result_child(trigonometric, 0), 2))) == "analytic");
     texsolve_result_destroy(trigonometric);
+
+    auto *cosine = run(context, R"(\cos{x}=0)", TEXSOLVE_OPERATION_SOLVE);
+    BOOST_REQUIRE_EQUAL(texsolve_result_child_count(cosine), 1u);
+    const auto cosine_family = text(texsolve_result_exact_latex(
+        texsolve_result_child(texsolve_result_child(cosine, 0), 0)));
+    BOOST_TEST(cosine_family.find("oo") == std::string::npos);
+    BOOST_TEST(cosine_family.find(R"(\mathbb{Z})") != std::string::npos);
+    texsolve_result_destroy(cosine);
+
+    auto *decimal_polynomial = run(
+        context, "(x+1)^2+3*x-0.5*(x-2)^2=0", TEXSOLVE_OPERATION_SOLVE);
+    BOOST_REQUIRE_EQUAL(texsolve_result_child_count(decimal_polynomial), 2u);
+    for (std::size_t index = 0; index < 2; ++index) {
+        const auto *value = texsolve_result_child(texsolve_result_child(decimal_polynomial, index), 0);
+        BOOST_TEST(text(texsolve_result_exact_latex(value)).find(R"(\sqrt{51})") != std::string::npos);
+        BOOST_TEST(texsolve_result_kind(value) == TEXSOLVE_RESULT_SYMBOLIC);
+    }
+    texsolve_result_destroy(decimal_polynomial);
+
     auto *factorial = run(context, R"(\prod_{i=1}^{x}i=6)", TEXSOLVE_OPERATION_SOLVE);
     BOOST_REQUIRE_EQUAL(texsolve_result_child_count(factorial), 1u);
     BOOST_TEST(text(texsolve_result_exact_latex(
         texsolve_result_child(texsolve_result_child(factorial, 0), 0))) == "3");
+    const auto *product_domain = named_child(texsolve_result_metadata(factorial), "domain");
+    BOOST_REQUIRE(product_domain != nullptr);
+    BOOST_TEST(text(texsolve_result_exact_latex(product_domain)) == R"(x \in \mathbb{Z}_{>0})");
     texsolve_result_destroy(factorial);
+
+    auto *not_factorial = run(
+        context, R"(\prod_{i=1}^{x}i=121645100408832001)", TEXSOLVE_OPERATION_SOLVE);
+    BOOST_TEST(texsolve_result_kind(not_factorial) == TEXSOLVE_RESULT_ROOT_SET);
+    BOOST_TEST(texsolve_result_child_count(not_factorial) == 0u);
+    product_domain = named_child(texsolve_result_metadata(not_factorial), "domain");
+    BOOST_REQUIRE(product_domain != nullptr);
+    BOOST_TEST(text(texsolve_result_exact_latex(product_domain)) == R"(x \in \mathbb{Z}_{>0})");
+    texsolve_result_destroy(not_factorial);
     texsolve_context_destroy(context);
 }
 

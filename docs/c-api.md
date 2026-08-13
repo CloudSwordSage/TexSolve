@@ -148,13 +148,13 @@ typedef struct texsolve_diagnostic {
 - `LIST` 的 child 只含数学数据并按稳定数学顺序保存。
 - `MAPPING` 的每个子节点以变量名命名。
 - `MATRIX` 的 child 只含行 `LIST`，行内 child 只含元素。
-- `ROOT_SET` 的 child 只含 `ROOT`，先实根后复根，再按实部/虚部排序。每个 `ROOT` 必须含 `value`（任意标量 kind）、`multiplicity`（`INTEGER`）、`search_kind`（`SYMBOLIC`）三个具名 child；`search_kind` 的精确文本只允许 `analytic`、`interval`、`local`。
+- `ROOT_SET` 的 child 只含 `ROOT`，先实根后复根，再按实部/虚部排序。每个 `ROOT` 必须含 `value`（任意标量 kind）、`multiplicity`（`INTEGER`）、`search_kind`（`SYMBOLIC`）三个具名 child；`search_kind` 的精确文本只允许 `analytic`、`interval`、`local`。参数化通解和离散有限乘积求解必须在顶层 metadata 中附加 `domain`（`SYMBOLIC`），例如 `n \in \mathbb{Z}` 或 `x \in \mathbb{Z}_{>0}`；不得用实数区间伪装整数定义域。
 - 数值积分结果为名为 `value` 的标量节点；误差与精度通过 metadata 读取。
 - `OPTIMUM` 的 child 固定为 `variables`（`MAPPING`）和 `objective`（标量）；迭代、收敛和终止信息只放 metadata。
 - `TRAJECTORY` 的 child 只含 `SAMPLE`；每个 sample 的 child 固定为 `t` 与按状态声明顺序排列的具名标量。
 - 每次公开 operation 返回的顶层数值结果必须由 `texsolve_result_metadata` 返回唯一 `METADATA`；只有确实使用不同后端或精度独立计算的子结果才有自己的 metadata。普通矩阵元素、复数分量、ROOT.value 和轨迹 sample 继承最近祖先 metadata，不重复存储。metadata 不计入 `texsolve_result_child_count`，其中必含 `precision_digits`（`INTEGER`）；存在可靠估计时含 `error_estimate`（`REAL`），否则省略。实际后端只通过 `texsolve_result_backend` 获取；子节点继承最近祖先的非空 backend accessor 值。`ROOT` metadata 另可含误差；`OPTIMUM` 另含 `iterations`（`INTEGER`）、`converged`（`BOOLEAN`）、`termination_reason`（`SYMBOLIC`）；`TRAJECTORY` 另含 `steps`（`INTEGER`）和 `termination_reason`（`SYMBOLIC`）。
 - `termination_reason` 的精确文本只允许 `converged`、`max_iterations`、`deadline`、`resource_limit`、`numerical_failure`、`user_stop`、`backend_failure`；无法精确映射的后端状态统一为 `backend_failure`，原始后端信息仅写诊断 message。
-- 所有数值 metadata 的整数使用 `INTEGER`，布尔使用 `BOOLEAN`，状态词使用 `SYMBOLIC` 且 exact text 取本节固定词。新 metadata 只能追加具名子节点；调用方必须按 name 查找而非依赖位置。
+- 所有数值 metadata 的整数使用 `INTEGER`，布尔使用 `BOOLEAN`，状态词和定义域使用 `SYMBOLIC`；状态词的 exact text 取本节固定词，定义域的 exact text 必须是可编译的 LaTeX。新 metadata 只能追加具名子节点；调用方必须按 name 查找而非依赖位置。
 
 ### 6.1 Context snapshot schema
 

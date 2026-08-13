@@ -24,14 +24,18 @@
 #include <sunnonlinsol/sunnonlinsol_fixedpoint.h>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcpp"
+#include <symengine/add.h>
 #include <symengine/eval_double.h>
 #include <symengine/complex.h>
 #include <symengine/integer.h>
 #include <symengine/matrix.h>
+#include <symengine/mul.h>
+#include <symengine/ntheory.h>
 #include <symengine/number.h>
 #include <symengine/parser.h>
 #include <symengine/printers.h>
 #include <symengine/sets.h>
+#include <symengine/simplify.h>
 #include <symengine/solve.h>
 #include <symengine/subs.h>
 #include <symengine/symbol.h>
@@ -100,11 +104,64 @@ SolverNode basic_scalar(std::string name, const Basic &value) {
     return result;
 }
 
+/** Extract square factors from exact integer radicals throughout an expression. */
+RCP<const Basic> normalize_integer_radicals(const RCP<const Basic> &value) {
+    if (SymEngine::is_a<SymEngine::Pow>(*value)) {
+        const auto &power = SymEngine::down_cast<const SymEngine::Pow &>(*value);
+        if (SymEngine::is_a<SymEngine::Integer>(*power.get_base()) &&
+            SymEngine::str(*power.get_exp()) == "1/2") {
+            const auto &radicand = SymEngine::down_cast<const SymEngine::Integer &>(*power.get_base());
+            // ponytail: avoid unbounded factorization; large radicals remain exact but less compact.
+            if (radicand.is_positive() && SymEngine::str(radicand).size() <= 12) {
+                SymEngine::map_integer_uint factors;
+                SymEngine::prime_factor_multiplicities(factors, radicand);
+                RCP<const Basic> outside = SymEngine::integer(1);
+                RCP<const Basic> inside = SymEngine::integer(1);
+                for (const auto &[factor, multiplicity] : factors) {
+                    if (multiplicity / 2 != 0) {
+                        outside = SymEngine::mul(outside,
+                            SymEngine::pow(factor, SymEngine::integer(multiplicity / 2)));
+                    }
+                    if (multiplicity % 2 != 0) inside = SymEngine::mul(inside, factor);
+                }
+                return SymEngine::mul(outside, SymEngine::sqrt(inside));
+            }
+        }
+        return value;
+    }
+    if (SymEngine::is_a<SymEngine::Add>(*value)) {
+        SymEngine::vec_basic terms;
+        for (const auto &term : value->get_args()) terms.push_back(normalize_integer_radicals(term));
+        return SymEngine::add(terms);
+    }
+    if (SymEngine::is_a<SymEngine::Mul>(*value)) {
+        SymEngine::vec_basic factors;
+        for (const auto &factor : value->get_args()) factors.push_back(normalize_integer_radicals(factor));
+        return SymEngine::mul(factors);
+    }
+    return value;
+}
+
 SolverNode exact_scalar(std::string name, std::string exact) {
     SolverNode result;
     result.kind = TEXSOLVE_RESULT_SYMBOLIC;
     result.name = std::move(name);
     result.exact = std::move(exact);
+    return result;
+}
+
+/** Normalize SymEngine set notation to compilable LaTeX and integer parameters. */
+std::string normalized_set_latex(const Basic &value) {
+    std::string result = SymEngine::latex(value);
+    const auto replace_all = [&](std::string_view from, std::string_view to) {
+        for (std::size_t position = 0; (position = result.find(from, position)) != std::string::npos;) {
+            result.replace(position, from.size(), to);
+            position += to.size();
+        }
+    };
+    replace_all(R"(n \in \left(-oo, oo\right))", R"(n \in \mathbb{Z})");
+    replace_all("-oo", R"(-\infty)");
+    replace_all("oo", R"(\infty)");
     return result;
 }
 
@@ -417,6 +474,18 @@ void collect_symbols(const Node &node, std::vector<std::string> &symbols,
     for (const auto &child : node.children) collect_symbols(child, symbols, bound);
 }
 
+/** Return whether an equation side is the literal zero. */
+bool is_zero(const Node &node) {
+    return (node.kind == NodeKind::Integer || node.kind == NodeKind::Real) &&
+           SymEngine::is_number_and_zero(*SymEngine::parse(to_backend_syntax(node)));
+}
+
+/** Return whether a node is sin(variable). */
+bool is_sine_of(const Node &node, std::string_view variable) {
+    return node.kind == NodeKind::Call && node.text == "sin" && node.children.size() == 1 &&
+           node.children[0].kind == NodeKind::Symbol && node.children[0].text == variable;
+}
+
 SolverOutput solve_equation(const Node &root, const std::map<std::string, Node> &bindings,
                             uint32_t max_iterations, uint32_t deadline_ms) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(deadline_ms);
@@ -478,31 +547,61 @@ SolverOutput solve_equation(const Node &root, const std::map<std::string, Node> 
             fold->children[0].text == "1" && fold->children[1].kind == NodeKind::Symbol &&
             fold->children[1].text == symbols.front() && fold->children[2].kind == NodeKind::Symbol &&
             fold->children[2].text == fold->text.substr(fold->text.find(':') + 1)) {
-            const double requested = scalar_value(*target);
-            if (std::isfinite(requested) && requested >= 1.0 &&
-                std::abs(requested - std::round(requested)) < 1e-12) {
-                RCP<const Basic> product = SymEngine::integer(1);
-                for (uint32_t value = 1; value <= max_iterations; ++value) {
-                    if (std::chrono::steady_clock::now() >= deadline) return failure(
-                        TEXSOLVE_STATUS_DEADLINE_EXCEEDED, TEXSOLVE_DIAGNOSTIC_DEADLINE,
-                        "equation solve deadline exceeded");
-                    product = SymEngine::mul(product, SymEngine::integer(value));
-                    if (SymEngine::eval_double(*product) == requested) {
-                        SolverOutput output;
-                        output.root.kind = TEXSOLVE_RESULT_ROOT_SET;
-                        output.root.backend = "symengine";
-                        SolverNode root_node;
-                        root_node.kind = TEXSOLVE_RESULT_ROOT;
-                        root_node.children.push_back(integer_node("value", value));
-                        root_node.children.push_back(integer_node("multiplicity", 1));
-                        root_node.children.push_back(exact_scalar("search_kind", "analytic"));
-                        output.root.children.push_back(std::move(root_node));
-                        output.root.metadata.push_back(integer_node("precision_digits", 15));
-                        return output;
-                    }
-                    if (SymEngine::eval_double(*product) > requested) break;
+            const auto product_result = [&](std::optional<uint32_t> value) {
+                SolverOutput output;
+                output.root.kind = TEXSOLVE_RESULT_ROOT_SET;
+                output.root.backend = "symengine";
+                if (value) {
+                    SolverNode root_node;
+                    root_node.kind = TEXSOLVE_RESULT_ROOT;
+                    root_node.children.push_back(integer_node("value", *value));
+                    root_node.children.push_back(integer_node("multiplicity", 1));
+                    root_node.children.push_back(exact_scalar("search_kind", "analytic"));
+                    output.root.children.push_back(std::move(root_node));
+                }
+                output.root.metadata.push_back(integer_node("precision_digits", 15));
+                output.root.metadata.push_back(exact_scalar(
+                    "domain", symbols.front() + " \\in \\mathbb{Z}_{>0}"));
+                return output;
+            };
+            const auto requested = SymEngine::parse(to_backend_syntax(*target));
+            if (!SymEngine::is_a<SymEngine::Integer>(*requested) ||
+                !SymEngine::down_cast<const SymEngine::Integer &>(*requested).is_positive()) {
+                return product_result(std::nullopt);
+            }
+            const auto &requested_integer = SymEngine::down_cast<const SymEngine::Integer &>(*requested);
+            RCP<const Basic> product = SymEngine::integer(1);
+            for (uint32_t value = 1; value <= max_iterations; ++value) {
+                if (std::chrono::steady_clock::now() >= deadline) return failure(
+                    TEXSOLVE_STATUS_DEADLINE_EXCEEDED, TEXSOLVE_DIAGNOSTIC_DEADLINE,
+                    "equation solve deadline exceeded");
+                product = SymEngine::mul(product, SymEngine::integer(value));
+                const auto &product_integer = SymEngine::down_cast<const SymEngine::Integer &>(*product);
+                if (SymEngine::eq(product_integer, requested_integer)) return product_result(value);
+                if (product_integer.as_integer_class() > requested_integer.as_integer_class()) {
+                    return product_result(std::nullopt);
                 }
             }
+            return failure(TEXSOLVE_STATUS_RESOURCE_LIMIT, TEXSOLVE_DIAGNOSTIC_ITERATION_LIMIT,
+                           "finite product equation iteration limit exceeded");
+        }
+        if (!bindings.contains(symbols.front()) &&
+            ((is_sine_of(root.children[0], symbols.front()) && is_zero(root.children[1])) ||
+             (is_sine_of(root.children[1], symbols.front()) && is_zero(root.children[0])))) {
+            const std::string parameter = symbols.front() == "n" ? "k" : "n";
+            SolverOutput output;
+            output.root.kind = TEXSOLVE_RESULT_ROOT_SET;
+            output.root.backend = "symengine";
+            SolverNode root_node;
+            root_node.kind = TEXSOLVE_RESULT_ROOT;
+            root_node.children.push_back(exact_scalar("value", parameter + " \\pi"));
+            root_node.children.push_back(integer_node("multiplicity", 1));
+            root_node.children.push_back(exact_scalar("search_kind", "analytic"));
+            output.root.children.push_back(std::move(root_node));
+            output.root.metadata.push_back(integer_node("precision_digits", 15));
+            output.root.metadata.push_back(exact_scalar(
+                "domain", parameter + " \\in \\mathbb{Z}"));
+            return output;
         }
         const auto expression = SymEngine::sub(SymEngine::parse(to_backend_syntax(root.children[0])),
                                                SymEngine::parse(to_backend_syntax(root.children[1])));
@@ -580,11 +679,14 @@ SolverOutput solve_equation(const Node &root, const std::map<std::string, Node> 
             output.root.backend = "symengine";
             SolverNode root_node;
             root_node.kind = TEXSOLVE_RESULT_ROOT;
-            root_node.children.push_back(basic_scalar("value", *solutions));
+            auto family = basic_scalar("value", *solutions);
+            family.exact = normalized_set_latex(*solutions);
+            root_node.children.push_back(std::move(family));
             root_node.children.push_back(integer_node("multiplicity", 1));
             root_node.children.push_back(exact_scalar("search_kind", "analytic"));
             output.root.children.push_back(std::move(root_node));
             output.root.metadata.push_back(integer_node("precision_digits", 15));
+            output.root.metadata.push_back(exact_scalar("domain", R"(n \in \mathbb{Z})"));
             return output;
         }
         if (values.empty() && radical_solution_set_is_finite) {
@@ -620,6 +722,7 @@ SolverOutput solve_equation(const Node &root, const std::map<std::string, Node> 
             RCP<const Basic> value;
             std::complex<double> approximate;
         };
+        for (auto &value : values) value = normalize_integer_radicals(SymEngine::simplify(value));
         std::vector<OrderedRoot> ordered;
         ordered.reserve(values.size());
         for (const auto &value : values) ordered.push_back({value, SymEngine::eval_complex_double(*value)});

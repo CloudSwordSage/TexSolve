@@ -92,6 +92,8 @@ integer       = digit { digit } ;
 | 幂/阶乘 | `x^{2}`, `5!` | `x^`, `(-1.2)!` |
 | 隐式乘法 | `2x`, `x(y+1)` | `2 3`, `f x` |
 
+有限十进制按精确有理数解释，例如 `0.5` 等价于 `\frac{1}{2}`，不会仅因出现小数点而切换到数值求解。未绑定的普通符号在标量化简中采用实数域，平方根按主值化简，例如 `\sqrt{x^2}=\left|x\right|`；显式绑定的值保留其实际数域。未提供 `x>0` 假设时不得进一步写成 `x`，因此 `\sqrt{9/(x*x)}+1/x` 的无条件实数形式含 `3/\left|x\right|`，而不是 `4/x`。
+
 ## 4. 函数白名单
 
 内建函数为 `\sin`、`\cos`、`\tan`、`\arcsin`、`\arccos`、`\arctan`、`\sinh`、`\cosh`、`\tanh`、`\exp`、`\ln`、`\log`、`\abs`、`\floor`、`\ceil`、`\min`、`\max`。`\log_{b}{x}` 表示指定底数；无下标的 `\log{x}` 为十进制，`\ln{x}` 为自然对数。
@@ -131,6 +133,8 @@ integer       = digit { digit } ;
 | 不等式 | `x^2\le 4` | `x<>2` |
 
 `\det`、`\operatorname{rank}`、`\operatorname{inv}`、`\operatorname{eigenvalues}` 和 `\operatorname{eigenvectors}` 是矩阵操作白名单。线性求解使用 relation set；不存在赋值语句中的链式等号。
+
+有限乘积 `\prod_{i=1}^{x}i` 的符号上界求解域为正整数，结果 metadata 必须显式给出 `x \in \mathbb{Z}_{>0}`。三角方程参数化通解使用整数参数定义域，例如 `\sin{x}=0` 返回 `x=n\pi` 的根值及 `n \in \mathbb{Z}`，不得把整数参数写成 `(-\infty,\infty)`。
 
 ## 7. 优化与 ODE
 

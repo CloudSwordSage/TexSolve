@@ -96,6 +96,19 @@ void print_result(const texsolve_result *result, std::size_t indent = 0) {
     }
 }
 
+/** Print a named top-level metadata value when it is present. */
+void print_metadata(const texsolve_result *result, std::string_view name) {
+    const auto *metadata = texsolve_result_metadata(result);
+    if (metadata == nullptr) return;
+    for (std::size_t index = 0; index < texsolve_result_child_count(metadata); ++index) {
+        const auto *item = texsolve_result_child(metadata, index);
+        if (text(texsolve_result_name(item)) == name) {
+            print_result(item, 1);
+            return;
+        }
+    }
+}
+
 int execute(texsolve_context *context, std::string_view input, int operation, bool debug) {
     if (debug) {
         const auto parsed = texsolve::parse_for_debug(input, 128, 50000);
@@ -108,7 +121,10 @@ int execute(texsolve_context *context, std::string_view input, int operation, bo
     request.latex = {input.data(), input.size()};
     texsolve_result *result = nullptr;
     const auto status = texsolve_execute(context, &request, &result);
-    if (status == TEXSOLVE_STATUS_OK && result != nullptr) print_result(result);
+    if (status == TEXSOLVE_STATUS_OK && result != nullptr) {
+        print_result(result);
+        print_metadata(result, "domain");
+    }
     if (result != nullptr) {
         for (std::size_t index = 0; index < texsolve_result_diagnostic_count(result); ++index) {
             texsolve_diagnostic diagnostic{};

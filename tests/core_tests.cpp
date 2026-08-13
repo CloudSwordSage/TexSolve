@@ -91,6 +91,41 @@ BOOST_AUTO_TEST_CASE(preserves_exact_numbers_and_result_lifetime) {
     texsolve_result_destroy(rational);
 }
 
+BOOST_AUTO_TEST_CASE(finite_decimals_and_real_square_roots_are_simplified_exactly) {
+    texsolve_context *context = nullptr;
+    BOOST_REQUIRE_EQUAL(texsolve_context_create(&context), TEXSOLVE_STATUS_OK);
+    auto *decimal = execute(context, "0.5");
+    BOOST_TEST(texsolve_result_kind(decimal) == TEXSOLVE_RESULT_RATIONAL);
+    BOOST_TEST(text(texsolve_result_exact_latex(decimal)) == R"(\frac{1}{2})");
+    texsolve_result_destroy(decimal);
+
+    auto *root = execute(context, R"(\sqrt{9/(x*x)}+1/x)");
+    const auto exact = text(texsolve_result_exact_latex(root));
+    BOOST_TEST(exact.find(R"(\left|x\right|)") != std::string::npos);
+    BOOST_TEST(exact.find(R"(\sqrt)") == std::string::npos);
+    texsolve_result_destroy(root);
+
+    const std::string expression = R"(\sqrt{9/(x*x)})";
+    const std::string name = "x";
+    const std::string value = "i";
+    texsolve_binding complex_binding{};
+    complex_binding.struct_size = sizeof(complex_binding);
+    complex_binding.name = {name.data(), name.size()};
+    complex_binding.value_latex = {value.data(), value.size()};
+    texsolve_request request{};
+    request.struct_size = sizeof(request);
+    request.abi_version = TEXSOLVE_ABI_VERSION;
+    request.latex = {expression.data(), expression.size()};
+    request.bindings = &complex_binding;
+    request.binding_count = 1;
+    request.binding_stride = sizeof(complex_binding);
+    texsolve_result *complex = nullptr;
+    BOOST_REQUIRE_EQUAL(texsolve_execute(context, &request, &complex), TEXSOLVE_STATUS_OK);
+    BOOST_TEST(texsolve_result_kind(complex) == TEXSOLVE_RESULT_COMPLEX);
+    texsolve_result_destroy(complex);
+    texsolve_context_destroy(context);
+}
+
 BOOST_AUTO_TEST_CASE(classifies_expression_types_and_builds_complex_children) {
     texsolve_context *context = nullptr;
     BOOST_REQUIRE_EQUAL(texsolve_context_create(&context), TEXSOLVE_STATUS_OK);
