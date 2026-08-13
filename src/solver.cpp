@@ -398,10 +398,23 @@ SolverOutput solve_linear_armadillo(const Node &root) {
     }
 }
 
-void collect_symbols(const Node &node, std::vector<std::string> &symbols) {
+/** Collect free scalar symbols while respecting finite-fold index scope. */
+void collect_symbols(const Node &node, std::vector<std::string> &symbols,
+                     const std::vector<std::string> &bound = {}) {
     if (node.kind == NodeKind::Symbol && node.text != "\\pi" && node.text != "e" && node.text != "i" &&
-        std::find(symbols.begin(), symbols.end(), node.text) == symbols.end()) symbols.push_back(node.text);
-    for (const auto &child : node.children) collect_symbols(child, symbols);
+        std::find(bound.begin(), bound.end(), node.text) == bound.end() &&
+        std::find(symbols.begin(), symbols.end(), node.text) == symbols.end()) {
+        symbols.push_back(node.text);
+    }
+    if (node.kind == NodeKind::Fold && node.children.size() == 3) {
+        collect_symbols(node.children[0], symbols, bound);
+        collect_symbols(node.children[1], symbols, bound);
+        auto fold_bound = bound;
+        fold_bound.push_back(node.text.substr(node.text.find(':') + 1));
+        collect_symbols(node.children[2], symbols, fold_bound);
+        return;
+    }
+    for (const auto &child : node.children) collect_symbols(child, symbols, bound);
 }
 
 SolverOutput solve_equation(const Node &root, const std::map<std::string, Node> &bindings,
@@ -456,16 +469,131 @@ SolverOutput solve_equation(const Node &root, const std::map<std::string, Node> 
         TEXSOLVE_DIAGNOSTIC_INCOMPLETE_PROBLEM, "one-variable polynomial solve requires exactly one unknown");
     try {
         const auto variable = SymEngine::symbol(symbols.front());
+        const Node *fold = root.children[0].kind == NodeKind::Fold ? &root.children[0]
+                         : root.children[1].kind == NodeKind::Fold ? &root.children[1] : nullptr;
+        const Node *target = fold == &root.children[0] ? &root.children[1]
+                           : fold == &root.children[1] ? &root.children[0] : nullptr;
+        if (fold != nullptr && target != nullptr && fold->text.starts_with("product:") &&
+            fold->children.size() == 3 && fold->children[0].kind == NodeKind::Integer &&
+            fold->children[0].text == "1" && fold->children[1].kind == NodeKind::Symbol &&
+            fold->children[1].text == symbols.front() && fold->children[2].kind == NodeKind::Symbol &&
+            fold->children[2].text == fold->text.substr(fold->text.find(':') + 1)) {
+            const double requested = scalar_value(*target);
+            if (std::isfinite(requested) && requested >= 1.0 &&
+                std::abs(requested - std::round(requested)) < 1e-12) {
+                RCP<const Basic> product = SymEngine::integer(1);
+                for (uint32_t value = 1; value <= max_iterations; ++value) {
+                    if (std::chrono::steady_clock::now() >= deadline) return failure(
+                        TEXSOLVE_STATUS_DEADLINE_EXCEEDED, TEXSOLVE_DIAGNOSTIC_DEADLINE,
+                        "equation solve deadline exceeded");
+                    product = SymEngine::mul(product, SymEngine::integer(value));
+                    if (SymEngine::eval_double(*product) == requested) {
+                        SolverOutput output;
+                        output.root.kind = TEXSOLVE_RESULT_ROOT_SET;
+                        output.root.backend = "symengine";
+                        SolverNode root_node;
+                        root_node.kind = TEXSOLVE_RESULT_ROOT;
+                        root_node.children.push_back(integer_node("value", value));
+                        root_node.children.push_back(integer_node("multiplicity", 1));
+                        root_node.children.push_back(exact_scalar("search_kind", "analytic"));
+                        output.root.children.push_back(std::move(root_node));
+                        output.root.metadata.push_back(integer_node("precision_digits", 15));
+                        return output;
+                    }
+                    if (SymEngine::eval_double(*product) > requested) break;
+                }
+            }
+        }
         const auto expression = SymEngine::sub(SymEngine::parse(to_backend_syntax(root.children[0])),
                                                SymEngine::parse(to_backend_syntax(root.children[1])));
         RCP<const SymEngine::Set> solutions;
         try {
-            solutions = SymEngine::solve_poly(expression, variable);
+            if (std::chrono::steady_clock::now() >= deadline) return failure(
+                TEXSOLVE_STATUS_DEADLINE_EXCEEDED, TEXSOLVE_DIAGNOSTIC_DEADLINE,
+                "equation solve deadline exceeded");
+            if (bindings.contains(symbols.front())) solutions = SymEngine::emptyset();
+            else solutions = SymEngine::solve(expression, variable);
+            if (std::chrono::steady_clock::now() >= deadline) return failure(
+                TEXSOLVE_STATUS_DEADLINE_EXCEEDED, TEXSOLVE_DIAGNOSTIC_DEADLINE,
+                "equation solve deadline exceeded");
         } catch (...) {
             solutions = SymEngine::emptyset();
         }
+        if (std::chrono::steady_clock::now() >= deadline) return failure(
+            TEXSOLVE_STATUS_DEADLINE_EXCEEDED, TEXSOLVE_DIAGNOSTIC_DEADLINE,
+            "equation solve deadline exceeded");
         std::vector<RCP<const Basic>> values;
         if (SymEngine::is_a<SymEngine::FiniteSet>(*solutions)) values = solutions->get_args();
+        const auto root_degree = [](const Node &node) -> std::optional<unsigned long> {
+            if (node.kind != NodeKind::Call || !node.text.starts_with("sqrt:") ||
+                node.children.size() != 1) return std::nullopt;
+            try {
+                return std::stoul(node.text.substr(5));
+            } catch (...) {
+                return std::nullopt;
+            }
+        };
+        const auto left_degree = root_degree(root.children[0]);
+        const auto right_degree = root_degree(root.children[1]);
+        bool radical_solution_set_is_finite = false;
+        if (values.empty() && (left_degree || right_degree)) {
+            try {
+                RCP<const Basic> transformed;
+                if (left_degree && right_degree && left_degree == right_degree) {
+                    transformed = SymEngine::sub(
+                        SymEngine::parse(to_backend_syntax(root.children[0].children[0])),
+                        SymEngine::parse(to_backend_syntax(root.children[1].children[0])));
+                } else if (left_degree) {
+                    transformed = SymEngine::sub(
+                        SymEngine::parse(to_backend_syntax(root.children[0].children[0])),
+                        SymEngine::pow(SymEngine::parse(to_backend_syntax(root.children[1])),
+                                       SymEngine::integer(*left_degree)));
+                } else {
+                    transformed = SymEngine::sub(
+                        SymEngine::pow(SymEngine::parse(to_backend_syntax(root.children[0])),
+                                       SymEngine::integer(*right_degree)),
+                        SymEngine::parse(to_backend_syntax(root.children[1].children[0])));
+                }
+                if (std::chrono::steady_clock::now() >= deadline) return failure(
+                    TEXSOLVE_STATUS_DEADLINE_EXCEEDED, TEXSOLVE_DIAGNOSTIC_DEADLINE,
+                    "equation solve deadline exceeded");
+                const auto radical_solutions = SymEngine::solve(transformed, variable);
+                if (std::chrono::steady_clock::now() >= deadline) return failure(
+                    TEXSOLVE_STATUS_DEADLINE_EXCEEDED, TEXSOLVE_DIAGNOSTIC_DEADLINE,
+                    "equation solve deadline exceeded");
+                if (SymEngine::is_a<SymEngine::EmptySet>(*radical_solutions)) {
+                    radical_solution_set_is_finite = true;
+                } else if (SymEngine::is_a<SymEngine::FiniteSet>(*radical_solutions)) {
+                    radical_solution_set_is_finite = true;
+                    for (const auto &candidate : radical_solutions->get_args()) {
+                        const auto left = expression->subs({{variable, candidate}});
+                        if (SymEngine::is_number_and_zero(*left)) values.push_back(candidate);
+                    }
+                }
+            } catch (...) {
+            }
+        }
+        if (values.empty() && (SymEngine::is_a<SymEngine::ImageSet>(*solutions) ||
+                               SymEngine::is_a<SymEngine::Union>(*solutions))) {
+            SolverOutput output;
+            output.root.kind = TEXSOLVE_RESULT_ROOT_SET;
+            output.root.backend = "symengine";
+            SolverNode root_node;
+            root_node.kind = TEXSOLVE_RESULT_ROOT;
+            root_node.children.push_back(basic_scalar("value", *solutions));
+            root_node.children.push_back(integer_node("multiplicity", 1));
+            root_node.children.push_back(exact_scalar("search_kind", "analytic"));
+            output.root.children.push_back(std::move(root_node));
+            output.root.metadata.push_back(integer_node("precision_digits", 15));
+            return output;
+        }
+        if (values.empty() && radical_solution_set_is_finite) {
+            SolverOutput output;
+            output.root.kind = TEXSOLVE_RESULT_ROOT_SET;
+            output.root.backend = "symengine";
+            output.root.metadata.push_back(integer_node("precision_digits", 15));
+            return output;
+        }
         if (values.empty()) {
             const auto initial = bindings.find(symbols.front());
             if (initial == bindings.end()) return failure(TEXSOLVE_STATUS_INVALID_ARGUMENT,

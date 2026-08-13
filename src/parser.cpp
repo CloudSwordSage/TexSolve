@@ -220,6 +220,7 @@ private:
             std::string op;
             if (consume("\\cdot")) op = "\\cdot";
             else if (consume("\\times")) op = "\\times";
+            else if (consume("*")) op = "*";
             else if (consume("/")) op = "/";
             else if (starts_primary() && (!had_space || starts("\\") || starts("("))) op = "implicit";
             else break;
@@ -652,7 +653,7 @@ private:
         auto upper = parse_expression();
         if (!upper || !consume("}")) return fail_node("invalid fold upper bound", pos_);
         if (upper->text == "\\infty") return fail_node("infinite folds are unsupported", upper->begin, 12);
-        auto body = parse_expression();
+        auto body = parse_product();
         if (!body) return std::nullopt;
         return make(NodeKind::Fold, name + ":" + *variable, start, body->end,
                     {std::move(*lower), std::move(*upper), std::move(*body)});

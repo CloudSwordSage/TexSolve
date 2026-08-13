@@ -26,6 +26,7 @@
 #pragma GCC diagnostic pop
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <iomanip>
@@ -283,34 +284,141 @@ Evaluation failure(int32_t status, int32_t code, std::string message, std::strin
     return result;
 }
 
+/** Return whether a scalar AST contains a finite sum or product node. */
+bool contains_fold(const Node &node) {
+    if (node.kind == NodeKind::Fold) return true;
+    return std::any_of(node.children.begin(), node.children.end(), contains_fold);
+}
+
+/**
+ * Convert a scalar AST to SymEngine while evaluating finite folds.
+ *
+ * Args:
+ *     node: Scalar AST node to convert.
+ *     bindings: Request and context substitutions.
+ *     locals: Lexically scoped fold indices.
+ *     max_iterations: Shared finite-fold iteration budget.
+ *     iterations: Iterations consumed by this expression.
+ *     deadline: Absolute cooperative deadline.
+ *     error: Failure result populated when conversion fails.
+ * Returns:
+ *     Converted scalar expression, or no value on failure.
+ */
+std::optional<RCP<const Basic>> scalar_expression(
+    const Node &node, const std::map<std::string, Node> &bindings,
+    const std::map<std::string, RCP<const Basic>> &locals, uint32_t max_iterations,
+    uint64_t &iterations, std::chrono::steady_clock::time_point deadline,
+    Evaluation &error) {
+    if (std::chrono::steady_clock::now() >= deadline) {
+        error = failure(TEXSOLVE_STATUS_DEADLINE_EXCEEDED, TEXSOLVE_DIAGNOSTIC_DEADLINE,
+                        "finite fold deadline exceeded", "symengine");
+        return std::nullopt;
+    }
+    if (node.kind == NodeKind::Integer || node.kind == NodeKind::Real) {
+        return SymEngine::parse(node.text);
+    }
+    if (node.kind == NodeKind::Symbol) {
+        if (const auto local = locals.find(node.text); local != locals.end()) return local->second;
+        if (const auto binding = bindings.find(node.text); binding != bindings.end()) {
+            return SymEngine::parse(to_backend_syntax(binding->second));
+        }
+        return SymEngine::parse(symbol_name(node.text));
+    }
+    if (node.kind == NodeKind::Fold) {
+        if (node.children.size() != 3) {
+            error = failure(TEXSOLVE_STATUS_SEMANTIC_ERROR, TEXSOLVE_DIAGNOSTIC_INCOMPLETE_PROBLEM,
+                            "finite fold is incomplete", "symengine");
+            return std::nullopt;
+        }
+        auto lower_value = scalar_expression(node.children[0], bindings, locals, max_iterations,
+                                             iterations, deadline, error);
+        auto upper_value = scalar_expression(node.children[1], bindings, locals, max_iterations,
+                                             iterations, deadline, error);
+        if (!lower_value || !upper_value) return std::nullopt;
+        const auto exact_integer = [](const RCP<const Basic> &value, int64_t &output) {
+            if (!SymEngine::is_a<SymEngine::Integer>(*value)) return false;
+            const std::string rendered = SymEngine::str(*value);
+            const auto [end, error] = std::from_chars(
+                rendered.data(), rendered.data() + rendered.size(), output);
+            return error == std::errc{} && end == rendered.data() + rendered.size();
+        };
+        int64_t lower = 0;
+        int64_t upper = 0;
+        if (!exact_integer(*lower_value, lower) || !exact_integer(*upper_value, upper)) {
+            error = failure(TEXSOLVE_STATUS_SEMANTIC_ERROR, TEXSOLVE_DIAGNOSTIC_DOMAIN_ERROR,
+                            "finite fold bounds must evaluate to integers", "symengine");
+            return std::nullopt;
+        }
+        const long double count = static_cast<long double>(upper) - static_cast<long double>(lower) + 1.0L;
+        if (upper < lower || iterations >= max_iterations ||
+            count > static_cast<long double>(max_iterations - iterations)) {
+            error = failure(TEXSOLVE_STATUS_RESOURCE_LIMIT, TEXSOLVE_DIAGNOSTIC_ITERATION_LIMIT,
+                            "finite fold iteration limit exceeded", "symengine");
+            return std::nullopt;
+        }
+        const auto separator = node.text.find(':');
+        const std::string variable = separator == std::string::npos ? std::string{} : node.text.substr(separator + 1);
+        auto accumulator = node.text.starts_with("product") ? RCP<const Basic>(SymEngine::integer(1))
+                                                            : RCP<const Basic>(SymEngine::integer(0));
+        auto fold_locals = locals;
+        for (int64_t value = lower;; ++value) {
+            ++iterations;
+            fold_locals[variable] = SymEngine::parse(std::to_string(value));
+            auto term = scalar_expression(node.children[2], bindings, fold_locals, max_iterations,
+                                          iterations, deadline, error);
+            if (!term) return std::nullopt;
+            accumulator = node.text.starts_with("product")
+                              ? SymEngine::mul(accumulator, *term)
+                              : SymEngine::add(accumulator, *term);
+            if (value == upper) break;
+        }
+        return accumulator;
+    }
+    if (node.kind == NodeKind::Unary && node.children.size() == 1) {
+        auto child = scalar_expression(node.children[0], bindings, locals, max_iterations,
+                                       iterations, deadline, error);
+        if (!child) return std::nullopt;
+        return node.text == "-" ? SymEngine::neg(*child) : *child;
+    }
+    if (node.kind == NodeKind::Binary && node.children.size() == 2) {
+        auto left = scalar_expression(node.children[0], bindings, locals, max_iterations,
+                                      iterations, deadline, error);
+        auto right = scalar_expression(node.children[1], bindings, locals, max_iterations,
+                                       iterations, deadline, error);
+        if (!left || !right) return std::nullopt;
+        if (node.text == "+") return SymEngine::add(*left, *right);
+        if (node.text == "-") return SymEngine::sub(*left, *right);
+        if (node.text == "frac" || node.text == "/") return SymEngine::div(*left, *right);
+        if (node.text == "^") return SymEngine::pow(*left, *right);
+        return SymEngine::mul(*left, *right);
+    }
+    if (node.kind == NodeKind::Call) {
+        std::string expression = node.text.starts_with("sqrt:") ? "(" : node.text + "(";
+        for (std::size_t index = 0; index < node.children.size(); ++index) {
+            auto argument = scalar_expression(node.children[index], bindings, locals, max_iterations,
+                                              iterations, deadline, error);
+            if (!argument) return std::nullopt;
+            if (index != 0) expression += ',';
+            expression += SymEngine::str(**argument);
+        }
+        expression += node.text.starts_with("sqrt:") ? ")^(1/" + node.text.substr(5) + ")" : ")";
+        return SymEngine::parse(expression);
+    }
+    error = failure(TEXSOLVE_STATUS_BACKEND_UNSUPPORTED, TEXSOLVE_DIAGNOSTIC_BACKEND_CAPABILITY,
+                    "AST node is not a scalar expression", "symengine");
+    return std::nullopt;
+}
+
 Evaluation evaluate_fold(const Node &root, bool product, const std::map<std::string, Node> &bindings,
                          uint32_t precision, uint32_t max_iterations,
                          std::chrono::steady_clock::time_point deadline, std::string backend) {
-    if (root.children.size() != 3) {
-        return failure(TEXSOLVE_STATUS_SEMANTIC_ERROR, TEXSOLVE_DIAGNOSTIC_INCOMPLETE_PROBLEM,
-                       "finite fold is incomplete", std::move(backend));
-    }
-    const int lower = std::stoi(root.children[0].text);
-    const int upper = std::stoi(root.children[1].text);
-    const auto count = static_cast<int64_t>(upper) - lower + 1;
-    if (upper < lower || count > max_iterations) {
-        return failure(TEXSOLVE_STATUS_RESOURCE_LIMIT, TEXSOLVE_DIAGNOSTIC_ITERATION_LIMIT,
-                       "finite fold iteration limit exceeded", std::move(backend));
-    }
-    RCP<const Basic> accumulator = product ? SymEngine::integer(1) : SymEngine::integer(0);
-    const auto variable = root.text.substr(root.text.find(':') + 1);
-    auto expression = symengine_expression(root.children[2], bindings);
-    const auto symbol = SymEngine::symbol(variable);
-    for (int value = lower; value <= upper; ++value) {
-        if (std::chrono::steady_clock::now() >= deadline) {
-            return failure(TEXSOLVE_STATUS_DEADLINE_EXCEEDED, TEXSOLVE_DIAGNOSTIC_DEADLINE,
-                           "finite fold deadline exceeded", std::move(backend));
-        }
-        const auto term = expression->subs({{symbol, SymEngine::integer(value)}});
-        accumulator = product ? SymEngine::mul(accumulator, term) : SymEngine::add(accumulator, term);
-    }
+    (void)product;
+    uint64_t iterations = 0;
+    Evaluation error;
+    auto accumulator = scalar_expression(root, bindings, {}, max_iterations, iterations, deadline, error);
+    if (!accumulator) return error;
     Evaluation result;
-    assign_symengine_scalar(result, *accumulator, precision);
+    assign_symengine_scalar(result, **accumulator, precision);
     result.backend = std::move(backend);
     return result;
 }
@@ -404,7 +512,17 @@ Evaluation evaluate_symengine(const Node &root, int32_t operation,
         expression_node = &root.children.front();
         derivative_variable = variable_from_derivative(root.text);
     }
-    auto expression = symengine_expression(*expression_node, bindings);
+    RCP<const Basic> expression;
+    if (contains_fold(*expression_node)) {
+        uint64_t iterations = 0;
+        Evaluation error;
+        auto expanded = scalar_expression(*expression_node, bindings, {}, max_iterations,
+                                          iterations, deadline, error);
+        if (!expanded) return error;
+        expression = *expanded;
+    } else {
+        expression = symengine_expression(*expression_node, bindings);
+    }
     if (root.kind == NodeKind::Derivative || operation == TEXSOLVE_OPERATION_DIFFERENTIATE) {
         if (derivative_variable.empty()) derivative_variable = "x";
         expression = expression->diff(SymEngine::symbol(derivative_variable));
@@ -425,7 +543,7 @@ Evaluation evaluate_ginac(const Node &root, int32_t operation,
     // GiNaC::Digits is process-global, so the lock covers precision selection and evaluation.
     static std::mutex ginac_mutex;
     const std::lock_guard lock(ginac_mutex);
-    if (root.kind == NodeKind::Fold || root.kind == NodeKind::Integral || root.kind == NodeKind::Limit) {
+    if (contains_fold(root) || root.kind == NodeKind::Integral || root.kind == NodeKind::Limit) {
         auto result = evaluate_symengine(root, operation, bindings, precision, max_iterations,
                                          deadline, integration_backend);
         result.backend = "ginac";

@@ -194,6 +194,45 @@ BOOST_AUTO_TEST_CASE(local_transcendental_root_is_supported) {
     texsolve_context_destroy(context);
 }
 
+BOOST_AUTO_TEST_CASE(symbolic_equations_use_general_solver_before_numeric_fallback) {
+    texsolve_context *context = nullptr;
+    BOOST_REQUIRE_EQUAL(texsolve_context_create(&context), TEXSOLVE_STATUS_OK);
+    auto *polynomial = run(context, "(x+1)*(x-1)-2=0", TEXSOLVE_OPERATION_SOLVE);
+    BOOST_TEST(texsolve_result_child_count(polynomial) == 2u);
+    texsolve_result_destroy(polynomial);
+    auto *radical = run(context, R"(\sqrt{x-1}=\sqrt{3})", TEXSOLVE_OPERATION_SOLVE);
+    BOOST_REQUIRE_EQUAL(texsolve_result_child_count(radical), 1u);
+    BOOST_TEST(text(texsolve_result_exact_latex(
+        texsolve_result_child(texsolve_result_child(radical, 0), 0))) == "4");
+    texsolve_result_destroy(radical);
+    auto *single_radical = run(context, R"(\sqrt{x}=2)", TEXSOLVE_OPERATION_SOLVE);
+    BOOST_REQUIRE_EQUAL(texsolve_result_child_count(single_radical), 1u);
+    BOOST_TEST(text(texsolve_result_exact_latex(
+        texsolve_result_child(texsolve_result_child(single_radical, 0), 0))) == "4");
+    texsolve_result_destroy(single_radical);
+    for (const std::string_view no_solution : {
+             std::string_view{R"(\sqrt{x}=-2)"},
+             std::string_view{R"(\sqrt{x}=\sqrt{x+1})"}}) {
+        auto *empty = run(context, no_solution, TEXSOLVE_OPERATION_SOLVE);
+        BOOST_TEST(texsolve_result_kind(empty) == TEXSOLVE_RESULT_ROOT_SET);
+        BOOST_TEST(texsolve_result_child_count(empty) == 0u);
+        texsolve_result_destroy(empty);
+    }
+    auto *trigonometric = run(context, R"(\sin{x}=0)", TEXSOLVE_OPERATION_SOLVE);
+    BOOST_REQUIRE_EQUAL(texsolve_result_child_count(trigonometric), 1u);
+    const auto *family = texsolve_result_child(texsolve_result_child(trigonometric, 0), 0);
+    BOOST_TEST(text(texsolve_result_exact_latex(family)).find(R"(\pi)") != std::string::npos);
+    BOOST_TEST(text(texsolve_result_exact_latex(
+        texsolve_result_child(texsolve_result_child(trigonometric, 0), 2))) == "analytic");
+    texsolve_result_destroy(trigonometric);
+    auto *factorial = run(context, R"(\prod_{i=1}^{x}i=6)", TEXSOLVE_OPERATION_SOLVE);
+    BOOST_REQUIRE_EQUAL(texsolve_result_child_count(factorial), 1u);
+    BOOST_TEST(text(texsolve_result_exact_latex(
+        texsolve_result_child(texsolve_result_child(factorial, 0), 0))) == "3");
+    texsolve_result_destroy(factorial);
+    texsolve_context_destroy(context);
+}
+
 BOOST_AUTO_TEST_CASE(explicit_optimization_backend_capabilities_are_enforced) {
     texsolve_context *context = nullptr;
     BOOST_REQUIRE_EQUAL(texsolve_context_create(&context), TEXSOLVE_STATUS_OK);

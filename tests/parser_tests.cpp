@@ -9,7 +9,7 @@ BOOST_AUTO_TEST_CASE(accepts_documented_whitelist_examples) {
     constexpr std::string_view inputs[] = {
         "12", "3.5", "2.1e-4", "x", R"(\alpha)", R"(\pi)",
         R"(\operatorname{rate})", R"(\frac{1}{x+1})", R"(\sqrt{x})",
-        R"(\sqrt[3]{8})", "x^{2}", "5!", "2x", "x(y+1)",
+        R"(\sqrt[3]{8})", "x^{2}", "5!", "2x", "x(y+1)", "x*(y+1)",
         R"(\sin{x}+\ln{2})", R"(\log_{2}{8})", R"(\left|x\right|)",
         R"(\abs{x})", R"(\max(1,2,x))", "f(x,y):=x+y", "f(1,2)",
         R"(\frac{d}{dx}{x^2})", R"(\frac{d^2}{dx^2}{x^3})",
