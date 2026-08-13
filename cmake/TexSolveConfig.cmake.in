@@ -1,5 +1,8 @@
 @PACKAGE_INIT@
 
+include(CMakeFindDependencyMacro)
+find_dependency(Intl)
+
 if(NOT TARGET TexSolveThirdParty::all)
   add_library(TexSolveThirdParty::all INTERFACE IMPORTED)
   set(_texsolve_archives)

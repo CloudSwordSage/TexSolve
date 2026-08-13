@@ -1,0 +1,568 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: TexSolve 0.1.0\n"
+"PO-Revision-Date: 2026-08-13 00:00+0800\n"
+"Last-Translator: TexSolve contributors\n"
+"Language: zh_CN\n"
+"Language-Team: Chinese\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid ""
+"Usage: texsolve [options] [operation] [expression]\n"
+"       texsolve [options] --file <path>\n"
+"       texsolve --repl\n"
+"\n"
+"Options:\n"
+"  -h, --help       Show this help\n"
+"  -v, --version    Show version\n"
+"  -r, --repl       Start the interactive REPL\n"
+"  -f, --file PATH  Read an expression from PATH\n"
+"  -d, --debug      Write the parsed AST to stderr\n"
+"  --                End option parsing\n"
+"\n"
+"Operations:\n"
+"  evaluate simplify expand factor differentiate integrate limit\n"
+"  sum product solve linear optimize ode define\n"
+msgstr ""
+"用法：texsolve [选项] [操作] [表达式]\n"
+"      texsolve [选项] --file <路径>\n"
+"      texsolve --repl\n"
+"\n"
+"选项：\n"
+"  -h, --help       显示帮助\n"
+"  -v, --version    显示版本\n"
+"  -r, --repl       启动交互式 REPL\n"
+"  -f, --file PATH  从 PATH 读取表达式\n"
+"  -d, --debug      将解析后的 AST 写入 stderr\n"
+"  --                结束选项解析\n"
+"\n"
+"操作：\n"
+"  evaluate simplify expand factor differentiate integrate limit\n"
+"  sum product solve linear optimize ode define\n"
+
+msgid ""
+"REPL commands:\n"
+"  :help, :h                 Show this help\n"
+"  :definitions              List saved definitions\n"
+"  :clear                    Clear saved definitions\n"
+"  :precision DIGITS         Set decimal precision\n"
+"  :backend CATEGORY NAME    Select a backend\n"
+"  :quit, :exit              Exit the REPL\n"
+msgstr ""
+"REPL 命令：\n"
+"  :help, :h                 显示帮助\n"
+"  :definitions              列出已保存定义\n"
+"  :clear                    清空已保存定义\n"
+"  :precision DIGITS         设置小数精度\n"
+"  :backend CATEGORY NAME    选择后端\n"
+"  :quit, :exit              退出 REPL\n"
+
+msgid "list"
+msgstr "列表"
+
+msgid "mapping"
+msgstr "映射"
+
+msgid "matrix"
+msgstr "矩阵"
+
+msgid "roots"
+msgstr "根集合"
+
+msgid "root"
+msgstr "根"
+
+msgid "optimum"
+msgstr "最优解"
+
+msgid "trajectory"
+msgstr "轨迹"
+
+msgid "sample"
+msgstr "采样点"
+
+msgid "value"
+msgstr "值"
+
+msgid "  backend: "
+msgstr "  后端："
+
+msgid "variables, "
+msgstr "个变量，"
+
+msgid "functions\n"
+msgstr "个函数\n"
+
+msgid "invalid REPL setting\n"
+msgstr "无效的 REPL 设置\n"
+
+msgid "missing path after "
+msgstr "以下选项后缺少路径："
+
+msgid "unknown option: "
+msgstr "未知选项："
+
+msgid "--repl cannot be combined with input, operation, or debug options\n"
+msgstr "--repl 不能与输入、操作或调试选项组合使用\n"
+
+msgid "cannot open input file\n"
+msgstr "无法打开输入文件\n"
+
+msgid "invalid UTF-8"
+msgstr "无效的 UTF-8"
+
+msgid "empty input"
+msgstr "输入为空"
+
+msgid "forbidden TeX command"
+msgstr "禁止的 TeX 命令"
+
+msgid "trailing input"
+msgstr "输入末尾存在多余内容"
+
+msgid "expected '=' after ':'"
+msgstr "':' 后应为 '='"
+
+msgid "invalid definition target"
+msgstr "无效的定义目标"
+
+msgid "duplicate or invalid function parameter"
+msgstr "函数参数重复或无效"
+
+msgid "duplicate relation operator"
+msgstr "关系运算符重复"
+
+msgid "missing operand"
+msgstr "缺少操作数"
+
+msgid "missing factor"
+msgstr "缺少因子"
+
+msgid "nesting limit exceeded"
+msgstr "超过嵌套限制"
+
+msgid "missing unary operand"
+msgstr "缺少一元操作数"
+
+msgid "missing exponent"
+msgstr "缺少指数"
+
+msgid "transpose requires a matrix expression"
+msgstr "转置需要矩阵表达式"
+
+msgid "factorial requires a non-negative integer"
+msgstr "阶乘需要非负整数"
+
+msgid "expected expression"
+msgstr "应为表达式"
+
+msgid "unexpected token"
+msgstr "意外的词法单元"
+
+msgid "invalid number"
+msgstr "无效数字"
+
+msgid "missing group opener"
+msgstr "缺少分组起始符"
+
+msgid "unterminated group"
+msgstr "分组未结束"
+
+msgid "unterminated left/right group"
+msgstr "left/right 分组未结束"
+
+msgid "unterminated absolute value"
+msgstr "绝对值表达式未结束"
+
+msgid "function requires a braced argument"
+msgstr "函数需要花括号参数"
+
+msgid "unknown command"
+msgstr "未知命令"
+
+msgid "fraction requires two groups"
+msgstr "分数需要两个分组"
+
+msgid "derivative orders do not match"
+msgstr "导数阶数不匹配"
+
+msgid "derivative requires an expression"
+msgstr "求导需要表达式"
+
+msgid "invalid root degree"
+msgstr "无效的根次数"
+
+msgid "root requires a braced expression"
+msgstr "根式需要花括号表达式"
+
+msgid "log base requires a group"
+msgstr "对数底数需要分组"
+
+msgid "log base cannot be one"
+msgstr "对数底数不能为一"
+
+msgid "log requires a braced expression"
+msgstr "对数需要花括号表达式"
+
+msgid "variadic function requires parentheses"
+msgstr "可变参数函数需要圆括号"
+
+msgid "variadic function requires arguments"
+msgstr "可变参数函数需要参数"
+
+msgid "expected ',' or ')'"
+msgstr "应为 ',' 或 ')'"
+
+msgid "empty calls are not allowed"
+msgstr "不允许空函数调用"
+
+msgid "invalid operator name"
+msgstr "无效的运算符名称"
+
+msgid "unterminated operator name"
+msgstr "运算符名称未结束"
+
+msgid "matrix operation requires a matrix"
+msgstr "矩阵操作需要矩阵"
+
+msgid "unsupported matrix environment"
+msgstr "不支持的矩阵环境"
+
+msgid "matrix rows must have equal width"
+msgstr "矩阵各行宽度必须相同"
+
+msgid "mismatched matrix environment"
+msgstr "矩阵环境不匹配"
+
+msgid "integral bounds are incomplete"
+msgstr "积分上下限不完整"
+
+msgid "integral requires a differential"
+msgstr "积分需要微分项"
+
+msgid "invalid differential variable"
+msgstr "无效的微分变量"
+
+msgid "double integral requires two differentials"
+msgstr "二重积分需要两个微分项"
+
+msgid "double integral requires distinct differentials"
+msgstr "二重积分需要不同的微分项"
+
+msgid "limit requires a subscript"
+msgstr "极限需要下标"
+
+msgid "limit requires \\to"
+msgstr "极限需要 \\to"
+
+msgid "unterminated limit subscript"
+msgstr "极限下标未结束"
+
+msgid "fold requires indexed lower bound"
+msgstr "求和或连乘需要带索引的下限"
+
+msgid "fold lower bound requires assignment"
+msgstr "求和或连乘的下限需要赋值"
+
+msgid "invalid fold bounds"
+msgstr "无效的求和或连乘边界"
+
+msgid "invalid fold upper bound"
+msgstr "无效的求和或连乘上限"
+
+msgid "infinite folds are unsupported"
+msgstr "不支持无穷求和或连乘"
+
+msgid "optimization requires variables"
+msgstr "优化需要变量"
+
+msgid "invalid optimization variable"
+msgstr "无效的优化变量"
+
+msgid "unterminated optimization variables"
+msgstr "优化变量列表未结束"
+
+msgid "optimization requires an objective"
+msgstr "优化需要目标函数"
+
+msgid "optimization constraint must be a relation"
+msgstr "优化约束必须是关系式"
+
+msgid "unterminated cases environment"
+msgstr "cases 环境未结束"
+
+msgid "cases entries must be relations"
+msgstr "cases 条目必须是关系式"
+
+msgid "invalid ODE clause"
+msgstr "无效的 ODE 子句"
+
+msgid "ODE initial value must be a relation"
+msgstr "ODE 初值必须是关系式"
+
+msgid "invalid ODE interval"
+msgstr "无效的 ODE 区间"
+
+msgid "ODE requires every initial derivative value"
+msgstr "ODE 需要每个初始导数值"
+
+msgid "ODE requires an interval and initial values"
+msgstr "ODE 需要区间和初值"
+
+msgid "request deadline exceeded during function expansion"
+msgstr "函数展开期间超过请求截止时间"
+
+msgid "user function arity mismatch"
+msgstr "用户函数参数数量不匹配"
+
+msgid "recursive user functions are unsupported"
+msgstr "不支持递归用户函数"
+
+msgid "function expansion nesting limit exceeded"
+msgstr "函数展开超过嵌套限制"
+
+msgid "AST node limit exceeded during function expansion"
+msgstr "函数展开期间超过 AST 节点限制"
+
+msgid "precision limit exceeded"
+msgstr "超过精度限制"
+
+msgid "iteration limit exceeded"
+msgstr "超过迭代限制"
+
+msgid "deadline limit exceeded"
+msgstr "超过截止时间限制"
+
+msgid "input byte limit exceeded"
+msgstr "超过输入字节限制"
+
+msgid "AST node limit exceeded"
+msgstr "超过 AST 节点限制"
+
+msgid "request deadline exceeded"
+msgstr "超过请求截止时间"
+
+msgid "explicit operation conflicts with request syntax"
+msgstr "显式操作与请求语法冲突"
+
+msgid "aggregate input byte limit exceeded"
+msgstr "超过聚合输入字节限制"
+
+msgid "binding name is not valid UTF-8"
+msgstr "绑定名称不是有效的 UTF-8"
+
+msgid "binding expression is not valid UTF-8"
+msgstr "绑定表达式不是有效的 UTF-8"
+
+msgid "binding name must be one scalar symbol"
+msgstr "绑定名称必须是单个标量符号"
+
+msgid "binding names must be unique scalar symbols"
+msgstr "绑定名称必须是唯一的标量符号"
+
+msgid "binding bounds must be valid scalar expressions"
+msgstr "绑定边界必须是有效的标量表达式"
+
+msgid "optimization kind and residual array disagree"
+msgstr "优化类型与残差数组不一致"
+
+msgid "finite fold deadline exceeded"
+msgstr "求和或连乘超过截止时间"
+
+msgid "finite fold is incomplete"
+msgstr "求和或连乘不完整"
+
+msgid "finite fold bounds must evaluate to integers"
+msgstr "求和或连乘边界必须求值为整数"
+
+msgid "finite fold iteration limit exceeded"
+msgstr "求和或连乘超过迭代限制"
+
+msgid "AST node is not a scalar expression"
+msgstr "AST 节点不是标量表达式"
+
+msgid "no analytic antiderivative is available"
+msgstr "没有可用的解析原函数"
+
+msgid "multiple integral normalization failed"
+msgstr "多重积分规范化失败"
+
+msgid "multiple integral normalization failed: "
+msgstr "多重积分规范化失败："
+
+msgid "no analytic multiple integral is available"
+msgstr "没有可用的解析多重积分"
+
+msgid "no analytic limit is available"
+msgstr "没有可用的解析极限"
+
+msgid "SymEngine does not provide polynomial factorization"
+msgstr "SymEngine 不提供多项式因式分解"
+
+msgid "numeric integration requires one finite interval"
+msgstr "数值积分需要一个有限区间"
+
+msgid "GSL workspace allocation failed"
+msgstr "GSL 工作区分配失败"
+
+msgid "numeric integrand evaluation failed"
+msgstr "数值被积函数求值失败"
+
+msgid "matrix required"
+msgstr "需要矩阵"
+
+msgid "matrix rows have inconsistent dimensions"
+msgstr "矩阵各行维度不一致"
+
+msgid "matrix dimensions do not match"
+msgstr "矩阵维度不匹配"
+
+msgid "determinant requires a square matrix"
+msgstr "行列式需要方阵"
+
+msgid "matrix inverse requires a nonsingular square matrix"
+msgstr "矩阵求逆需要非奇异方阵"
+
+msgid "eigenvalues require a square matrix"
+msgstr "求特征值需要方阵"
+
+msgid "eigenvectors require a square matrix"
+msgstr "求特征向量需要方阵"
+
+msgid "exact symbolic eigenvalues currently require a 2x2 or diagonal matrix"
+msgstr "精确符号特征值目前需要 2x2 矩阵或对角矩阵"
+
+msgid "symbolic eigenvalue deadline exceeded"
+msgstr "符号特征值计算超过截止时间"
+
+msgid "Armadillo eigen solve failed"
+msgstr "Armadillo 特征求解失败"
+
+msgid "unsupported matrix expression"
+msgstr "不支持的矩阵表达式"
+
+msgid "unsupported linear algebra operation"
+msgstr "不支持的线性代数操作"
+
+msgid "unsupported Armadillo linear algebra operation"
+msgstr "不支持的 Armadillo 线性代数操作"
+
+msgid "solve requires an equation"
+msgstr "求解需要方程"
+
+msgid "one-variable polynomial solve requires exactly one unknown"
+msgstr "单变量多项式求解必须恰有一个未知量"
+
+msgid "numeric solve requires an initial value or interval"
+msgstr "数值求解需要初值或区间"
+
+msgid "numeric root search did not converge"
+msgstr "数值寻根未收敛"
+
+msgid "root multiplicity deadline exceeded"
+msgstr "根重数计算超过截止时间"
+
+msgid "finite product equation iteration limit exceeded"
+msgstr "有限乘积方程超过迭代限制"
+
+msgid "equation solve deadline exceeded"
+msgstr "方程求解超过截止时间"
+
+msgid "linear system must have one equation per unknown"
+msgstr "线性方程组的方程数必须等于未知量数"
+
+msgid "linear system is singular or underdetermined"
+msgstr "线性方程组奇异或欠定"
+
+msgid "optimization problem is incomplete"
+msgstr "优化问题不完整"
+
+msgid "optimization objective is missing"
+msgstr "缺少优化目标"
+
+msgid "optimization requires an initial value for every variable"
+msgstr "优化需要每个变量的初值"
+
+msgid "optimization lower bound exceeds upper bound"
+msgstr "优化下限超过上限"
+
+msgid "Ceres requires a least-squares residual request"
+msgstr "Ceres 需要最小二乘残差请求"
+
+msgid "Ceres least squares does not accept general relation constraints"
+msgstr "Ceres 最小二乘不接受一般关系约束"
+
+msgid "Ceres least squares does not accept variable bounds"
+msgstr "Ceres 最小二乘不接受变量边界"
+
+msgid "least squares requires variables and residuals"
+msgstr "最小二乘需要变量和残差"
+
+msgid "least squares requires an initial value for every variable"
+msgstr "最小二乘需要每个变量的初值"
+
+msgid "Ceres least-squares solve did not converge"
+msgstr "Ceres 最小二乘求解未收敛"
+
+msgid "failed to create NLopt optimizer"
+msgstr "创建 NLopt 优化器失败"
+
+msgid "NLopt callback evaluation failed"
+msgstr "NLopt 回调求值失败"
+
+msgid "NLopt deadline exceeded"
+msgstr "NLopt 超过截止时间"
+
+msgid "NLopt iteration limit exceeded"
+msgstr "NLopt 超过迭代限制"
+
+msgid "NLopt did not converge"
+msgstr "NLopt 未收敛"
+
+msgid "ODE IVP is incomplete"
+msgstr "ODE 初值问题不完整"
+
+msgid "DAE and BVP are unsupported"
+msgstr "不支持 DAE 和边值问题"
+
+msgid "ODE independent variable is missing"
+msgstr "缺少 ODE 自变量"
+
+msgid "ODE interval must increase"
+msgstr "ODE 区间必须递增"
+
+msgid "ODE derivative state is missing"
+msgstr "缺少 ODE 导数状态"
+
+msgid "ODE system must use one independent variable"
+msgstr "ODE 系统必须使用同一个自变量"
+
+msgid "ODE initial values must use one initial time"
+msgstr "ODE 初值必须使用同一个初始时刻"
+
+msgid "ODE requires a complete initial value for every normalized state"
+msgstr "ODE 要求每个规范化状态都有完整初值"
+
+msgid "SUNDIALS context creation failed"
+msgstr "SUNDIALS 上下文创建失败"
+
+msgid "SUNDIALS allocation failed"
+msgstr "SUNDIALS 分配失败"
+
+msgid "SUNDIALS RHS evaluation failed"
+msgstr "SUNDIALS 右端项求值失败"
+
+msgid "SUNDIALS request deadline exceeded"
+msgstr "SUNDIALS 超过请求截止时间"
+
+msgid "SUNDIALS integration failed"
+msgstr "SUNDIALS 积分失败"
+
+msgid "unsupported solver operation"
+msgstr "不支持的求解器操作"
+
+msgid "unknown symbolic backend"
+msgstr "未知的符号后端"

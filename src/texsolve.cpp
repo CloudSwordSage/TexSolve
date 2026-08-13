@@ -2,6 +2,7 @@
 
 #include "internal.hpp"
 #include "evaluator.hpp"
+#include "i18n.hpp"
 #include "solver.hpp"
 
 #include <algorithm>
@@ -153,7 +154,8 @@ std::unique_ptr<texsolve_result> make_error(texsolve_status status, const texsol
     auto result = make_node(TEXSOLVE_RESULT_NONE);
     result->status = status;
     result->diagnostics.push_back({TEXSOLVE_SEVERITY_ERROR, parsed.diagnostic_code,
-                                   parsed.error_begin, parsed.error_end, parsed.message});
+                                   parsed.error_begin, parsed.error_end,
+                                   texsolve::i18n::translate(parsed.message)});
     return result;
 }
 
@@ -362,6 +364,7 @@ uint32_t TEXSOLVE_CALL texsolve_abi_version(void) { return TEXSOLVE_ABI_VERSION;
 
 texsolve_status TEXSOLVE_CALL texsolve_context_create(texsolve_context **out) {
     if (out == nullptr) return TEXSOLVE_STATUS_INVALID_ARGUMENT;
+    texsolve::i18n::initialize();
     *out = nullptr;
     try {
         *out = new texsolve_context();

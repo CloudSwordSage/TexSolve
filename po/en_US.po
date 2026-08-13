@@ -1,0 +1,524 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: TexSolve 0.1.0\n"
+"PO-Revision-Date: 2026-08-13 00:00+0800\n"
+"Last-Translator: TexSolve contributors\n"
+"Language: en_US\n"
+"Language-Team: English\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Usage: texsolve [options] [operation] [expression]\n       texsolve [options] --file <path>\n       texsolve --repl\n\nOptions:\n  -h, --help       Show this help\n  -v, --version    Show version\n  -r, --repl       Start the interactive REPL\n  -f, --file PATH  Read an expression from PATH\n  -d, --debug      Write the parsed AST to stderr\n  --                End option parsing\n\nOperations:\n  evaluate simplify expand factor differentiate integrate limit\n  sum product solve linear optimize ode define\n"
+msgstr "Usage: texsolve [options] [operation] [expression]\n       texsolve [options] --file <path>\n       texsolve --repl\n\nOptions:\n  -h, --help       Show this help\n  -v, --version    Show version\n  -r, --repl       Start the interactive REPL\n  -f, --file PATH  Read an expression from PATH\n  -d, --debug      Write the parsed AST to stderr\n  --                End option parsing\n\nOperations:\n  evaluate simplify expand factor differentiate integrate limit\n  sum product solve linear optimize ode define\n"
+
+msgid "REPL commands:\n  :help, :h                 Show this help\n  :definitions              List saved definitions\n  :clear                    Clear saved definitions\n  :precision DIGITS         Set decimal precision\n  :backend CATEGORY NAME    Select a backend\n  :quit, :exit              Exit the REPL\n"
+msgstr "REPL commands:\n  :help, :h                 Show this help\n  :definitions              List saved definitions\n  :clear                    Clear saved definitions\n  :precision DIGITS         Set decimal precision\n  :backend CATEGORY NAME    Select a backend\n  :quit, :exit              Exit the REPL\n"
+
+msgid "list"
+msgstr "list"
+
+msgid "mapping"
+msgstr "mapping"
+
+msgid "matrix"
+msgstr "matrix"
+
+msgid "roots"
+msgstr "roots"
+
+msgid "root"
+msgstr "root"
+
+msgid "optimum"
+msgstr "optimum"
+
+msgid "trajectory"
+msgstr "trajectory"
+
+msgid "sample"
+msgstr "sample"
+
+msgid "value"
+msgstr "value"
+
+msgid "  backend: "
+msgstr "  backend: "
+
+msgid "variables, "
+msgstr "variables, "
+
+msgid "functions\n"
+msgstr "functions\n"
+
+msgid "invalid REPL setting\n"
+msgstr "invalid REPL setting\n"
+
+msgid "missing path after "
+msgstr "missing path after "
+
+msgid "unknown option: "
+msgstr "unknown option: "
+
+msgid "--repl cannot be combined with input, operation, or debug options\n"
+msgstr "--repl cannot be combined with input, operation, or debug options\n"
+
+msgid "cannot open input file\n"
+msgstr "cannot open input file\n"
+
+msgid "invalid UTF-8"
+msgstr "invalid UTF-8"
+
+msgid "empty input"
+msgstr "empty input"
+
+msgid "forbidden TeX command"
+msgstr "forbidden TeX command"
+
+msgid "trailing input"
+msgstr "trailing input"
+
+msgid "expected '=' after ':'"
+msgstr "expected '=' after ':'"
+
+msgid "invalid definition target"
+msgstr "invalid definition target"
+
+msgid "duplicate or invalid function parameter"
+msgstr "duplicate or invalid function parameter"
+
+msgid "duplicate relation operator"
+msgstr "duplicate relation operator"
+
+msgid "missing operand"
+msgstr "missing operand"
+
+msgid "missing factor"
+msgstr "missing factor"
+
+msgid "nesting limit exceeded"
+msgstr "nesting limit exceeded"
+
+msgid "missing unary operand"
+msgstr "missing unary operand"
+
+msgid "missing exponent"
+msgstr "missing exponent"
+
+msgid "transpose requires a matrix expression"
+msgstr "transpose requires a matrix expression"
+
+msgid "factorial requires a non-negative integer"
+msgstr "factorial requires a non-negative integer"
+
+msgid "expected expression"
+msgstr "expected expression"
+
+msgid "unexpected token"
+msgstr "unexpected token"
+
+msgid "invalid number"
+msgstr "invalid number"
+
+msgid "missing group opener"
+msgstr "missing group opener"
+
+msgid "unterminated group"
+msgstr "unterminated group"
+
+msgid "unterminated left/right group"
+msgstr "unterminated left/right group"
+
+msgid "unterminated absolute value"
+msgstr "unterminated absolute value"
+
+msgid "function requires a braced argument"
+msgstr "function requires a braced argument"
+
+msgid "unknown command"
+msgstr "unknown command"
+
+msgid "fraction requires two groups"
+msgstr "fraction requires two groups"
+
+msgid "derivative orders do not match"
+msgstr "derivative orders do not match"
+
+msgid "derivative requires an expression"
+msgstr "derivative requires an expression"
+
+msgid "invalid root degree"
+msgstr "invalid root degree"
+
+msgid "root requires a braced expression"
+msgstr "root requires a braced expression"
+
+msgid "log base requires a group"
+msgstr "log base requires a group"
+
+msgid "log base cannot be one"
+msgstr "log base cannot be one"
+
+msgid "log requires a braced expression"
+msgstr "log requires a braced expression"
+
+msgid "variadic function requires parentheses"
+msgstr "variadic function requires parentheses"
+
+msgid "variadic function requires arguments"
+msgstr "variadic function requires arguments"
+
+msgid "expected ',' or ')'"
+msgstr "expected ',' or ')'"
+
+msgid "empty calls are not allowed"
+msgstr "empty calls are not allowed"
+
+msgid "invalid operator name"
+msgstr "invalid operator name"
+
+msgid "unterminated operator name"
+msgstr "unterminated operator name"
+
+msgid "matrix operation requires a matrix"
+msgstr "matrix operation requires a matrix"
+
+msgid "unsupported matrix environment"
+msgstr "unsupported matrix environment"
+
+msgid "matrix rows must have equal width"
+msgstr "matrix rows must have equal width"
+
+msgid "mismatched matrix environment"
+msgstr "mismatched matrix environment"
+
+msgid "integral bounds are incomplete"
+msgstr "integral bounds are incomplete"
+
+msgid "integral requires a differential"
+msgstr "integral requires a differential"
+
+msgid "invalid differential variable"
+msgstr "invalid differential variable"
+
+msgid "double integral requires two differentials"
+msgstr "double integral requires two differentials"
+
+msgid "double integral requires distinct differentials"
+msgstr "double integral requires distinct differentials"
+
+msgid "limit requires a subscript"
+msgstr "limit requires a subscript"
+
+msgid "limit requires \\to"
+msgstr "limit requires \\to"
+
+msgid "unterminated limit subscript"
+msgstr "unterminated limit subscript"
+
+msgid "fold requires indexed lower bound"
+msgstr "fold requires indexed lower bound"
+
+msgid "fold lower bound requires assignment"
+msgstr "fold lower bound requires assignment"
+
+msgid "invalid fold bounds"
+msgstr "invalid fold bounds"
+
+msgid "invalid fold upper bound"
+msgstr "invalid fold upper bound"
+
+msgid "infinite folds are unsupported"
+msgstr "infinite folds are unsupported"
+
+msgid "optimization requires variables"
+msgstr "optimization requires variables"
+
+msgid "invalid optimization variable"
+msgstr "invalid optimization variable"
+
+msgid "unterminated optimization variables"
+msgstr "unterminated optimization variables"
+
+msgid "optimization requires an objective"
+msgstr "optimization requires an objective"
+
+msgid "optimization constraint must be a relation"
+msgstr "optimization constraint must be a relation"
+
+msgid "unterminated cases environment"
+msgstr "unterminated cases environment"
+
+msgid "cases entries must be relations"
+msgstr "cases entries must be relations"
+
+msgid "invalid ODE clause"
+msgstr "invalid ODE clause"
+
+msgid "ODE initial value must be a relation"
+msgstr "ODE initial value must be a relation"
+
+msgid "invalid ODE interval"
+msgstr "invalid ODE interval"
+
+msgid "ODE requires every initial derivative value"
+msgstr "ODE requires every initial derivative value"
+
+msgid "ODE requires an interval and initial values"
+msgstr "ODE requires an interval and initial values"
+
+msgid "request deadline exceeded during function expansion"
+msgstr "request deadline exceeded during function expansion"
+
+msgid "user function arity mismatch"
+msgstr "user function arity mismatch"
+
+msgid "recursive user functions are unsupported"
+msgstr "recursive user functions are unsupported"
+
+msgid "function expansion nesting limit exceeded"
+msgstr "function expansion nesting limit exceeded"
+
+msgid "AST node limit exceeded during function expansion"
+msgstr "AST node limit exceeded during function expansion"
+
+msgid "precision limit exceeded"
+msgstr "precision limit exceeded"
+
+msgid "iteration limit exceeded"
+msgstr "iteration limit exceeded"
+
+msgid "deadline limit exceeded"
+msgstr "deadline limit exceeded"
+
+msgid "input byte limit exceeded"
+msgstr "input byte limit exceeded"
+
+msgid "AST node limit exceeded"
+msgstr "AST node limit exceeded"
+
+msgid "request deadline exceeded"
+msgstr "request deadline exceeded"
+
+msgid "explicit operation conflicts with request syntax"
+msgstr "explicit operation conflicts with request syntax"
+
+msgid "aggregate input byte limit exceeded"
+msgstr "aggregate input byte limit exceeded"
+
+msgid "binding name is not valid UTF-8"
+msgstr "binding name is not valid UTF-8"
+
+msgid "binding expression is not valid UTF-8"
+msgstr "binding expression is not valid UTF-8"
+
+msgid "binding name must be one scalar symbol"
+msgstr "binding name must be one scalar symbol"
+
+msgid "binding names must be unique scalar symbols"
+msgstr "binding names must be unique scalar symbols"
+
+msgid "binding bounds must be valid scalar expressions"
+msgstr "binding bounds must be valid scalar expressions"
+
+msgid "optimization kind and residual array disagree"
+msgstr "optimization kind and residual array disagree"
+
+msgid "finite fold deadline exceeded"
+msgstr "finite fold deadline exceeded"
+
+msgid "finite fold is incomplete"
+msgstr "finite fold is incomplete"
+
+msgid "finite fold bounds must evaluate to integers"
+msgstr "finite fold bounds must evaluate to integers"
+
+msgid "finite fold iteration limit exceeded"
+msgstr "finite fold iteration limit exceeded"
+
+msgid "AST node is not a scalar expression"
+msgstr "AST node is not a scalar expression"
+
+msgid "no analytic antiderivative is available"
+msgstr "no analytic antiderivative is available"
+
+msgid "multiple integral normalization failed"
+msgstr "multiple integral normalization failed"
+
+msgid "multiple integral normalization failed: "
+msgstr "multiple integral normalization failed: "
+
+msgid "no analytic multiple integral is available"
+msgstr "no analytic multiple integral is available"
+
+msgid "no analytic limit is available"
+msgstr "no analytic limit is available"
+
+msgid "SymEngine does not provide polynomial factorization"
+msgstr "SymEngine does not provide polynomial factorization"
+
+msgid "numeric integration requires one finite interval"
+msgstr "numeric integration requires one finite interval"
+
+msgid "GSL workspace allocation failed"
+msgstr "GSL workspace allocation failed"
+
+msgid "numeric integrand evaluation failed"
+msgstr "numeric integrand evaluation failed"
+
+msgid "matrix required"
+msgstr "matrix required"
+
+msgid "matrix rows have inconsistent dimensions"
+msgstr "matrix rows have inconsistent dimensions"
+
+msgid "matrix dimensions do not match"
+msgstr "matrix dimensions do not match"
+
+msgid "determinant requires a square matrix"
+msgstr "determinant requires a square matrix"
+
+msgid "matrix inverse requires a nonsingular square matrix"
+msgstr "matrix inverse requires a nonsingular square matrix"
+
+msgid "eigenvalues require a square matrix"
+msgstr "eigenvalues require a square matrix"
+
+msgid "eigenvectors require a square matrix"
+msgstr "eigenvectors require a square matrix"
+
+msgid "exact symbolic eigenvalues currently require a 2x2 or diagonal matrix"
+msgstr "exact symbolic eigenvalues currently require a 2x2 or diagonal matrix"
+
+msgid "symbolic eigenvalue deadline exceeded"
+msgstr "symbolic eigenvalue deadline exceeded"
+
+msgid "Armadillo eigen solve failed"
+msgstr "Armadillo eigen solve failed"
+
+msgid "unsupported matrix expression"
+msgstr "unsupported matrix expression"
+
+msgid "unsupported linear algebra operation"
+msgstr "unsupported linear algebra operation"
+
+msgid "unsupported Armadillo linear algebra operation"
+msgstr "unsupported Armadillo linear algebra operation"
+
+msgid "solve requires an equation"
+msgstr "solve requires an equation"
+
+msgid "one-variable polynomial solve requires exactly one unknown"
+msgstr "one-variable polynomial solve requires exactly one unknown"
+
+msgid "numeric solve requires an initial value or interval"
+msgstr "numeric solve requires an initial value or interval"
+
+msgid "numeric root search did not converge"
+msgstr "numeric root search did not converge"
+
+msgid "root multiplicity deadline exceeded"
+msgstr "root multiplicity deadline exceeded"
+
+msgid "finite product equation iteration limit exceeded"
+msgstr "finite product equation iteration limit exceeded"
+
+msgid "equation solve deadline exceeded"
+msgstr "equation solve deadline exceeded"
+
+msgid "linear system must have one equation per unknown"
+msgstr "linear system must have one equation per unknown"
+
+msgid "linear system is singular or underdetermined"
+msgstr "linear system is singular or underdetermined"
+
+msgid "optimization problem is incomplete"
+msgstr "optimization problem is incomplete"
+
+msgid "optimization objective is missing"
+msgstr "optimization objective is missing"
+
+msgid "optimization requires an initial value for every variable"
+msgstr "optimization requires an initial value for every variable"
+
+msgid "optimization lower bound exceeds upper bound"
+msgstr "optimization lower bound exceeds upper bound"
+
+msgid "Ceres requires a least-squares residual request"
+msgstr "Ceres requires a least-squares residual request"
+
+msgid "Ceres least squares does not accept general relation constraints"
+msgstr "Ceres least squares does not accept general relation constraints"
+
+msgid "Ceres least squares does not accept variable bounds"
+msgstr "Ceres least squares does not accept variable bounds"
+
+msgid "least squares requires variables and residuals"
+msgstr "least squares requires variables and residuals"
+
+msgid "least squares requires an initial value for every variable"
+msgstr "least squares requires an initial value for every variable"
+
+msgid "Ceres least-squares solve did not converge"
+msgstr "Ceres least-squares solve did not converge"
+
+msgid "failed to create NLopt optimizer"
+msgstr "failed to create NLopt optimizer"
+
+msgid "NLopt callback evaluation failed"
+msgstr "NLopt callback evaluation failed"
+
+msgid "NLopt deadline exceeded"
+msgstr "NLopt deadline exceeded"
+
+msgid "NLopt iteration limit exceeded"
+msgstr "NLopt iteration limit exceeded"
+
+msgid "NLopt did not converge"
+msgstr "NLopt did not converge"
+
+msgid "ODE IVP is incomplete"
+msgstr "ODE IVP is incomplete"
+
+msgid "DAE and BVP are unsupported"
+msgstr "DAE and BVP are unsupported"
+
+msgid "ODE independent variable is missing"
+msgstr "ODE independent variable is missing"
+
+msgid "ODE interval must increase"
+msgstr "ODE interval must increase"
+
+msgid "ODE derivative state is missing"
+msgstr "ODE derivative state is missing"
+
+msgid "ODE system must use one independent variable"
+msgstr "ODE system must use one independent variable"
+
+msgid "ODE initial values must use one initial time"
+msgstr "ODE initial values must use one initial time"
+
+msgid "ODE requires a complete initial value for every normalized state"
+msgstr "ODE requires a complete initial value for every normalized state"
+
+msgid "SUNDIALS context creation failed"
+msgstr "SUNDIALS context creation failed"
+
+msgid "SUNDIALS allocation failed"
+msgstr "SUNDIALS allocation failed"
+
+msgid "SUNDIALS RHS evaluation failed"
+msgstr "SUNDIALS RHS evaluation failed"
+
+msgid "SUNDIALS request deadline exceeded"
+msgstr "SUNDIALS request deadline exceeded"
+
+msgid "SUNDIALS integration failed"
+msgstr "SUNDIALS integration failed"
+
+msgid "unsupported solver operation"
+msgstr "unsupported solver operation"
+
+msgid "unknown symbolic backend"
+msgstr "unknown symbolic backend"

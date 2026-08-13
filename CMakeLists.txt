@@ -4,6 +4,8 @@ project(TexSolve VERSION 0.1.0 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
+find_package(Gettext REQUIRED)
+find_package(Intl REQUIRED)
 
 option(TEXSOLVE_BUILD_TESTS "Build TexSolve tests" ${PROJECT_IS_TOP_LEVEL})
 option(TEXSOLVE_BUILD_CLI "Build the TexSolve command-line program" ON)
@@ -15,14 +17,28 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(cmake/TexSolveDependencies.cmake)
 
-add_library(texsolve_objects OBJECT src/texsolve.cpp src/parser.cpp src/evaluator.cpp src/solver.cpp)
+set(TEXSOLVE_TRANSLATIONS)
+foreach(_locale IN ITEMS en_US zh_CN)
+  set(_translation "${PROJECT_BINARY_DIR}/locale/${_locale}/LC_MESSAGES/texsolve.mo")
+  add_custom_command(OUTPUT "${_translation}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/locale/${_locale}/LC_MESSAGES"
+    COMMAND ${GETTEXT_MSGFMT_EXECUTABLE} -c -o "${_translation}"
+            "${PROJECT_SOURCE_DIR}/po/${_locale}.po"
+    DEPENDS "${PROJECT_SOURCE_DIR}/po/${_locale}.po"
+    VERBATIM)
+  list(APPEND TEXSOLVE_TRANSLATIONS "${_translation}")
+endforeach()
+add_custom_target(texsolve_translations ALL DEPENDS ${TEXSOLVE_TRANSLATIONS})
+
+add_library(texsolve_objects OBJECT src/texsolve.cpp src/parser.cpp src/evaluator.cpp src/solver.cpp src/i18n.cpp)
+add_dependencies(texsolve_objects texsolve_translations)
 set_target_properties(texsolve_objects PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(texsolve_objects
   PUBLIC
     "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
     "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
   PRIVATE "${PROJECT_SOURCE_DIR}/src")
-target_link_libraries(texsolve_objects PRIVATE TexSolveThirdParty::all)
+target_link_libraries(texsolve_objects PRIVATE TexSolveThirdParty::all Intl::Intl)
 target_compile_options(texsolve_objects PRIVATE -Wall -Wextra -Wpedantic)
 target_compile_definitions(texsolve_objects PRIVATE TEXSOLVE_BUILDING_DLL)
 
@@ -35,15 +51,17 @@ set_target_properties(texsolve_static PROPERTIES OUTPUT_NAME texsolve_static EXP
 target_include_directories(texsolve_shared PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 target_include_directories(texsolve_static PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 target_compile_definitions(texsolve_static INTERFACE TEXSOLVE_STATIC)
-target_link_libraries(texsolve_shared PRIVATE TexSolveThirdParty::all)
+target_link_libraries(texsolve_shared PRIVATE TexSolveThirdParty::all Intl::Intl)
 target_link_libraries(texsolve_static PUBLIC
   "$<BUILD_INTERFACE:TexSolveThirdParty::all>"
-  "$<INSTALL_INTERFACE:TexSolveThirdParty::all>")
+  "$<INSTALL_INTERFACE:TexSolveThirdParty::all>"
+  Intl::Intl)
 
 if(TEXSOLVE_BUILD_CLI)
-  add_executable(texsolve_cli src/cli.cpp src/parser.cpp)
+  add_executable(texsolve_cli src/cli.cpp src/parser.cpp src/i18n.cpp)
+  add_dependencies(texsolve_cli texsolve_translations)
   set_target_properties(texsolve_cli PROPERTIES OUTPUT_NAME texsolve)
-  target_link_libraries(texsolve_cli PRIVATE TexSolve::shared TexSolveThirdParty::all)
+  target_link_libraries(texsolve_cli PRIVATE TexSolve::shared TexSolveThirdParty::all Intl::Intl)
   target_include_directories(texsolve_cli PRIVATE "${PROJECT_SOURCE_DIR}/src")
   target_compile_options(texsolve_cli PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -54,6 +72,10 @@ if(TEXSOLVE_BUILD_TESTS)
 endif()
 
 if(TEXSOLVE_ENABLE_INSTALL)
+  foreach(_locale IN ITEMS en_US zh_CN)
+    install(FILES "${PROJECT_BINARY_DIR}/locale/${_locale}/LC_MESSAGES/texsolve.mo"
+      DESTINATION "${CMAKE_INSTALL_LOCALEDIR}/${_locale}/LC_MESSAGES")
+  endforeach()
   install(TARGETS texsolve_shared texsolve_static
     EXPORT TexSolveTargets
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

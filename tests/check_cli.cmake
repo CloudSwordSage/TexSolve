@@ -5,7 +5,8 @@ file(WRITE "${WORK_DIR}/repl-short-help.txt" ":h\n:quit\n")
 
 function(run_cli expected_status expected_stdout expected_stderr)
   execute_process(
-    COMMAND "${CLI}" ${ARGN}
+    COMMAND "${CMAKE_COMMAND}" -E env "LANG=en_US.UTF-8" "LC_ALL=en_US.UTF-8"
+            "${CLI}" ${ARGN}
     RESULT_VARIABLE status
     OUTPUT_VARIABLE stdout
     ERROR_VARIABLE stderr)
@@ -39,7 +40,38 @@ run_cli(2 "^$" ".+" --repl solve)
 run_cli(2 "^$" ".+" --debug --repl)
 
 execute_process(
-  COMMAND "${CLI}" --repl
+  COMMAND "${CMAKE_COMMAND}" -E env "LANG=zh_CN.UTF-8" "LC_ALL=zh_CN.UTF-8" "${CLI}" --help
+  RESULT_VARIABLE zh_help_status
+  OUTPUT_VARIABLE zh_help_stdout
+  ERROR_VARIABLE zh_help_stderr)
+if(NOT zh_help_status EQUAL 0 OR NOT zh_help_stdout MATCHES "用法：texsolve" OR NOT zh_help_stderr STREQUAL "")
+  message(FATAL_ERROR "Chinese help check failed: status=${zh_help_status}, stdout=${zh_help_stdout}, stderr=${zh_help_stderr}")
+endif()
+
+execute_process(
+  COMMAND "${CMAKE_COMMAND}" -E env "LANG=zh_CN.UTF-8" "LC_ALL=en_US.UTF-8" "${CLI}" --help
+  RESULT_VARIABLE locale_precedence_status
+  OUTPUT_VARIABLE locale_precedence_stdout
+  ERROR_VARIABLE locale_precedence_stderr)
+if(NOT locale_precedence_status EQUAL 0 OR
+   NOT locale_precedence_stdout MATCHES "Usage: texsolve" OR
+   NOT locale_precedence_stderr STREQUAL "")
+  message(FATAL_ERROR "Locale precedence check failed: status=${locale_precedence_status}, stdout=${locale_precedence_stdout}, stderr=${locale_precedence_stderr}")
+endif()
+
+execute_process(
+  COMMAND "${CMAKE_COMMAND}" -E env "LANG=zh_CN.UTF-8" "LC_ALL=zh_CN.UTF-8" "${CLI}" "\\unknown{x}"
+  RESULT_VARIABLE zh_diagnostic_status
+  OUTPUT_VARIABLE zh_diagnostic_stdout
+  ERROR_VARIABLE zh_diagnostic_stderr)
+if(NOT zh_diagnostic_status EQUAL 3 OR NOT zh_diagnostic_stdout STREQUAL "" OR
+   NOT zh_diagnostic_stderr MATCHES "未知命令")
+  message(FATAL_ERROR "Chinese diagnostic check failed: status=${zh_diagnostic_status}, stdout=${zh_diagnostic_stdout}, stderr=${zh_diagnostic_stderr}")
+endif()
+
+execute_process(
+  COMMAND "${CMAKE_COMMAND}" -E env "LANG=en_US.UTF-8" "LC_ALL=en_US.UTF-8"
+          "${CLI}" --repl
   INPUT_FILE "${WORK_DIR}/repl-input.txt"
   RESULT_VARIABLE repl_status
   OUTPUT_VARIABLE repl_stdout
@@ -50,7 +82,8 @@ if(NOT repl_status EQUAL 0 OR NOT repl_stdout MATCHES "REPL commands:" OR
 endif()
 
 execute_process(
-  COMMAND "${CLI}" -r
+  COMMAND "${CMAKE_COMMAND}" -E env "LANG=en_US.UTF-8" "LC_ALL=en_US.UTF-8"
+          "${CLI}" -r
   INPUT_FILE "${WORK_DIR}/repl-short-help.txt"
   RESULT_VARIABLE short_repl_status
   OUTPUT_VARIABLE short_repl_stdout
@@ -60,7 +93,8 @@ if(NOT short_repl_status EQUAL 0 OR NOT short_repl_stdout MATCHES "REPL commands
 endif()
 
 execute_process(
-  COMMAND "${CLI}"
+  COMMAND "${CMAKE_COMMAND}" -E env "LANG=en_US.UTF-8" "LC_ALL=en_US.UTF-8"
+          "${CLI}"
   INPUT_FILE "${WORK_DIR}/cli-input.tex"
   RESULT_VARIABLE stdin_status
   OUTPUT_VARIABLE stdin_stdout
@@ -70,7 +104,8 @@ if(NOT stdin_status EQUAL 0 OR NOT stdin_stdout MATCHES "2" OR NOT stdin_stderr 
 endif()
 
 execute_process(
-  COMMAND "${CLI}" --file "${WORK_DIR}/cli-input.tex"
+  COMMAND "${CMAKE_COMMAND}" -E env "LANG=en_US.UTF-8" "LC_ALL=en_US.UTF-8"
+          "${CLI}" --file "${WORK_DIR}/cli-input.tex"
   INPUT_FILE "${WORK_DIR}/cli-input.tex"
   RESULT_VARIABLE conflict_status)
 if(NOT conflict_status EQUAL 2)

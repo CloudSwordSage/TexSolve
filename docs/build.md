@@ -2,7 +2,11 @@
 
 ## 1. 支持环境
 
-首版支持 Windows x64、MSYS2 UCRT64、GCC C++20 和 Ninja。参考环境为 GCC 16.1.0、CMake 4.3.2、Ninja 1.13.2、pkg-config 2.5.1。最低 CMake 版本定为 3.25；实现不得依赖高于该版本才有的语义。
+首版支持 Windows x64、MSYS2 UCRT64、GCC C++20 和 Ninja。参考环境为 GCC 16.1.0、CMake 4.3.2、Ninja 1.13.2、pkg-config 2.5.1，并要求 UCRT64 GetText/libintl。最低 CMake 版本定为 3.25；实现不得依赖高于该版本才有的语义。
+
+用户可见文本由 `LANG`/`LC_ALL` 选择 `en_US.UTF-8` 或 `zh_CN.UTF-8`。GetText 按 `LC_ALL > LC_MESSAGES > LANG` 取值；测试或脚本需要覆盖语言时应同时设置 `LANG` 与 `LC_ALL`。
+
+CLI 与 DLL 自动从相邻安装前缀查找 `share/locale`。外部程序静态链接 `TexSolve::static` 时，应在首次创建 context 前把 `TEXSOLVE_LOCALE_DIR` 设为 `<prefix>/share/locale`；这避免把构建机的绝对安装路径写入静态库。
 
 所有命令从仓库根目录通过 UCRT64 包装执行：
 
@@ -26,7 +30,7 @@ shared/static 必须复用同一 object library 或同一源码清单，避免�
 
 ## 3. 离线第三方依赖
 
-CMake 只搜索 `${PROJECT_SOURCE_DIR}/third_party`，配置阶段不得使用 FetchContent、ExternalProject 下载或系统包兜底。各类别映射如下：
+数学后端只从 `${PROJECT_SOURCE_DIR}/third_party` 搜索；GetText 工具和 libintl 使用 UCRT64 环境的系统包。配置阶段不得使用 FetchContent 或 ExternalProject 下载依赖。各类别映射如下：
 
 根目录 `third_party.info.md` 是依赖库存与早期推荐记录；若其职责措辞与本节或 [design.md](design.md) 冲突，以这两份正式规范为准。特别是 Boost.Math 只承担数值积分备选，ODE 固定使用 SUNDIALS；Ceres/NLopt 承担本项目的一般非线性优化接口。
 
@@ -71,6 +75,7 @@ CMake 只搜索 `${PROJECT_SOURCE_DIR}/third_party`，配置阶段不得使用 F
 <prefix>/lib/libtexsolve.dll.a
 <prefix>/lib/libtexsolve_static.a
 <prefix>/include/texsolve/texsolve.h
+<prefix>/share/locale/{en_US,zh_CN}/LC_MESSAGES/texsolve.mo
 <prefix>/lib/cmake/TexSolve/TexSolveConfig.cmake
 <prefix>/lib/cmake/TexSolve/TexSolveConfigVersion.cmake
 <prefix>/lib/cmake/TexSolve/TexSolveTargets.cmake

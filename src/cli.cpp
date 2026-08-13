@@ -1,4 +1,5 @@
 #include "internal.hpp"
+#include "i18n.hpp"
 
 #include <charconv>
 #include <cctype>
@@ -17,7 +18,7 @@
 namespace {
 
 void print_help() {
-    std::cout <<
+    std::cout << texsolve::i18n::translate(
         "Usage: texsolve [options] [operation] [expression]\n"
         "       texsolve [options] --file <path>\n"
         "       texsolve --repl\n\n"
@@ -30,18 +31,18 @@ void print_help() {
         "  --                End option parsing\n\n"
         "Operations:\n"
         "  evaluate simplify expand factor differentiate integrate limit\n"
-        "  sum product solve linear optimize ode define\n";
+        "  sum product solve linear optimize ode define\n");
 }
 
 void print_repl_help() {
-    std::cout <<
+    std::cout << texsolve::i18n::translate(
         "REPL commands:\n"
         "  :help, :h                 Show this help\n"
         "  :definitions              List saved definitions\n"
         "  :clear                    Clear saved definitions\n"
         "  :precision DIGITS         Set decimal precision\n"
         "  :backend CATEGORY NAME    Select a backend\n"
-        "  :quit, :exit              Exit the REPL\n";
+        "  :quit, :exit              Exit the REPL\n");
 }
 
 int exit_code(texsolve_status status) {
@@ -60,17 +61,17 @@ std::string text(texsolve_string_view view) {
     return view.data == nullptr ? std::string{} : std::string(view.data, view.size);
 }
 
-const char *kind_name(int32_t kind) {
+std::string kind_name(int32_t kind) {
     switch (kind) {
-        case TEXSOLVE_RESULT_LIST: return "list";
-        case TEXSOLVE_RESULT_MAPPING: return "mapping";
-        case TEXSOLVE_RESULT_MATRIX: return "matrix";
-        case TEXSOLVE_RESULT_ROOT_SET: return "roots";
-        case TEXSOLVE_RESULT_ROOT: return "root";
-        case TEXSOLVE_RESULT_OPTIMUM: return "optimum";
-        case TEXSOLVE_RESULT_TRAJECTORY: return "trajectory";
-        case TEXSOLVE_RESULT_SAMPLE: return "sample";
-        default: return "value";
+        case TEXSOLVE_RESULT_LIST: return texsolve::i18n::translate("list");
+        case TEXSOLVE_RESULT_MAPPING: return texsolve::i18n::translate("mapping");
+        case TEXSOLVE_RESULT_MATRIX: return texsolve::i18n::translate("matrix");
+        case TEXSOLVE_RESULT_ROOT_SET: return texsolve::i18n::translate("roots");
+        case TEXSOLVE_RESULT_ROOT: return texsolve::i18n::translate("root");
+        case TEXSOLVE_RESULT_OPTIMUM: return texsolve::i18n::translate("optimum");
+        case TEXSOLVE_RESULT_TRAJECTORY: return texsolve::i18n::translate("trajectory");
+        case TEXSOLVE_RESULT_SAMPLE: return texsolve::i18n::translate("sample");
+        default: return texsolve::i18n::translate("value");
     }
 }
 
@@ -127,7 +128,7 @@ int execute(texsolve_context *context, std::string_view input, int operation, bo
         if (text(texsolve_result_exact_latex(result)).empty() &&
             !text(texsolve_result_approximation(result)).empty()) {
             const auto backend = text(texsolve_result_backend(result));
-            if (!backend.empty()) std::cout << "  backend: " << backend << '\n';
+            if (!backend.empty()) std::cout << texsolve::i18n::translate("  backend: ") << backend << '\n';
             print_metadata(result, "precision_digits");
         }
     }
@@ -213,14 +214,18 @@ int repl(texsolve_context *context) {
             if (texsolve_context_snapshot(context, &snapshot) == TEXSOLVE_STATUS_OK) {
                 const auto *variables = texsolve_result_child(snapshot, 0);
                 const auto *functions = texsolve_result_child(snapshot, 1);
-                std::cout << texsolve_result_child_count(variables) << " variables, "
-                          << texsolve_result_child_count(functions) << " functions\n";
+                std::cout << texsolve_result_child_count(variables) << ' '
+                          << texsolve::i18n::translate("variables, ")
+                          << texsolve_result_child_count(functions) << ' '
+                          << texsolve::i18n::translate("functions\n");
             }
             texsolve_result_destroy(snapshot);
             continue;
         }
         if (line.starts_with(":precision ") || line.starts_with(":backend ")) {
-            if (!configure_repl(context, options, line)) std::cerr << "invalid REPL setting\n";
+            if (!configure_repl(context, options, line)) {
+                std::cerr << texsolve::i18n::translate("invalid REPL setting\n");
+            }
             continue;
         }
         if (!line.empty()) execute(context, line, TEXSOLVE_OPERATION_AUTO, false);
@@ -251,6 +256,7 @@ bool stdin_is_terminal() { return _isatty(_fileno(stdin)) != 0; }
 }  // namespace
 
 int main(int argc, char **argv) {
+    texsolve::i18n::initialize();
     texsolve_context *context = nullptr;
     if (texsolve_context_create(&context) != TEXSOLVE_STATUS_OK) return 70;
     bool debug = false;
@@ -278,7 +284,7 @@ int main(int argc, char **argv) {
         else if (argument == "-r" || argument == "--repl") force_repl = true;
         else if (argument == "-f" || argument == "--file") {
             if (++index >= argc) {
-                std::cerr << "missing path after " << argument << '\n';
+                std::cerr << texsolve::i18n::translate("missing path after ") << argument << '\n';
                 texsolve_context_destroy(context);
                 return 2;
             }
@@ -288,14 +294,15 @@ int main(int argc, char **argv) {
         } else if (argument.starts_with("--") ||
                    (argument.size() > 1 && argument.front() == '-' &&
                     std::isalpha(static_cast<unsigned char>(argument[1])))) {
-            std::cerr << "unknown option: " << argument << '\n';
+            std::cerr << texsolve::i18n::translate("unknown option: ") << argument << '\n';
             texsolve_context_destroy(context);
             return 2;
         } else expressions.emplace_back(argument);
     }
     if (force_repl) {
         if (!file.empty() || !expressions.empty() || debug || operation != TEXSOLVE_OPERATION_AUTO) {
-            std::cerr << "--repl cannot be combined with input, operation, or debug options\n";
+            std::cerr << texsolve::i18n::translate(
+                "--repl cannot be combined with input, operation, or debug options\n");
             texsolve_context_destroy(context);
             return 2;
         }
@@ -311,7 +318,7 @@ int main(int argc, char **argv) {
         }
         std::ifstream stream(file, std::ios::binary);
         if (!stream) {
-            std::cerr << "cannot open input file\n";
+            std::cerr << texsolve::i18n::translate("cannot open input file\n");
             texsolve_context_destroy(context);
             return 2;
         }
