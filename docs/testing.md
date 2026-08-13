@@ -48,7 +48,7 @@
 
 ABI 测试使用 C 编译单元包含公开头，另用 C++ 编译单元验证 `extern "C"`。必须覆盖较小 `struct_size`、较大结构尾部、旧/新 binding 大小与不同 `binding_stride`、binding/residual 数组乘法溢出、residual 空/非空指针与逐项 UTF-8、聚合输入字节预算、错误 ABI 版本、固定枚举数值、diagnostic 最小尺寸、含 NUL 的 view、空 output 和重复销毁约束。结果测试必须分别遍历数学 child 和 metadata accessor，按名称读取根重数/搜索种类、线代精度、优化终止信息及 ODE 步数/终止原因，并验证 context snapshot 的 variables/functions/config schema。重复销毁非空悬空指针不受支持；销毁 NULL 必须安全。
 
-CLI 退出码固定为：0 成功、2 用法/参数、3 解析或语义、4 不支持/无解析解、5 后端未收敛、6 资源/截止、70 内部错误。`--help/-h` 与 `--version/-v` 返回 0；`--precision/-p` 必须覆盖有效值、零值和缺失值，`--backend/-b` 必须覆盖四类后端、非法名称和缺失参数。文件与 stdin 冲突时返回 2。无输入源且 stdin 为终端时进入 REPL；`--repl/-r` 显式进入 REPL；管道空输入返回 2，不进入 REPL。REPL 的 `:help` 与 `:h` 输出同一命令摘要，`:help backend` 与 `:h backend` 输出完整后端清单。
+CLI 退出码固定为：0 成功、2 用法/参数、3 解析或语义、4 不支持/无解析解、5 后端未收敛、6 资源/截止、70 内部错误。`--help/-h` 与 `--version/-v` 返回 0；`--precision/-p` 必须覆盖有效值、零值和缺失值，`--backend/-b` 必须覆盖四类后端、非法名称和缺失参数。文件与 stdin 冲突时返回 2。无输入源且 stdin 为终端时进入 REPL；`--repl/-r` 显式进入 REPL；管道空输入返回 2，不进入 REPL。REPL 的 `:help` 与 `:h` 输出同一命令摘要，`:help backend` 与 `:h backend` 输出完整后端清单。行编辑测试必须覆盖 `Ctrl+C` 取消、手工输入时忽略历史箭头、历史双向浏览，以及左右/Home/End/Delete/Backspace 编辑。
 
 ## 6. 资源与性能
 

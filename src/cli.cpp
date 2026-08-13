@@ -1,6 +1,8 @@
 #include "internal.hpp"
 #include "i18n.hpp"
+#include "repl_line_editor.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cctype>
 #include <cstdio>
@@ -10,10 +12,12 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <io.h>
 #include <texsolve/texsolve.h>
+#include <windows.h>
 
 namespace {
 
@@ -240,9 +244,151 @@ bool configure_repl(texsolve_context *context, texsolve_context_options &options
     return false;
 }
 
+bool stdin_is_terminal();
+
+enum class ConsoleLineStatus { line, cancelled, end };
+
+struct ConsoleLine {
+    ConsoleLineStatus status;
+    std::wstring text;
+    std::string utf8_text;
+};
+
+class ConsoleInputMode {
+public:
+    explicit ConsoleInputMode(HANDLE input) : input_(input) {
+        active_ = GetConsoleMode(input_, &previous_) &&
+                  SetConsoleMode(input_, previous_ & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT |
+                                                       ENABLE_PROCESSED_INPUT));
+    }
+    ~ConsoleInputMode() {
+        if (active_) SetConsoleMode(input_, previous_);
+    }
+    bool active() const { return active_; }
+
+private:
+    HANDLE input_;
+    DWORD previous_ = 0;
+    bool active_ = false;
+};
+
+void write_console(HANDLE output, std::wstring_view text) {
+    DWORD written = 0;
+    WriteConsoleW(output, text.data(), static_cast<DWORD>(text.size()), &written, nullptr);
+}
+
+void redraw_console_line(HANDLE output, COORD origin, const ReplLineEditor &editor,
+                         std::size_t &previous_cells) {
+    CONSOLE_SCREEN_BUFFER_INFO info{};
+    if (!GetConsoleScreenBufferInfo(output, &info) || info.dwSize.X <= 0) return;
+    const std::wstring rendered = L"> " + editor.text();
+    DWORD written = 0;
+    FillConsoleOutputCharacterW(output, L' ', static_cast<DWORD>(previous_cells), origin, &written);
+    SetConsoleCursorPosition(output, origin);
+    write_console(output, rendered);
+    if (GetConsoleScreenBufferInfo(output, &info)) {
+        previous_cells = static_cast<std::size_t>(info.dwCursorPosition.Y - origin.Y) * info.dwSize.X +
+                         info.dwCursorPosition.X - origin.X;
+    }
+    SetConsoleCursorPosition(output, origin);
+    write_console(output, std::wstring_view(rendered).substr(0, 2 + editor.cursor()));
+}
+
+ConsoleLine read_console_line(const std::vector<std::wstring> &history) {
+    const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+    const HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
+    CONSOLE_SCREEN_BUFFER_INFO info{};
+    if (!GetConsoleScreenBufferInfo(output, &info)) {
+        std::cout << "> ";
+        std::string line;
+        return std::getline(std::cin, line)
+                   ? ConsoleLine{ConsoleLineStatus::line, {}, std::move(line)}
+                   : ConsoleLine{ConsoleLineStatus::end, {}, {}};
+    }
+    ConsoleInputMode mode(input);
+    if (!mode.active()) {
+        std::cout << "> ";
+        std::string line;
+        return std::getline(std::cin, line)
+                   ? ConsoleLine{ConsoleLineStatus::line, {}, std::move(line)}
+                   : ConsoleLine{ConsoleLineStatus::end, {}, {}};
+    }
+
+    ReplLineEditor editor;
+    const COORD origin = info.dwCursorPosition;
+    std::size_t rendered_size = 0;
+    redraw_console_line(output, origin, editor, rendered_size);
+    for (;;) {
+        INPUT_RECORD record{};
+        DWORD read = 0;
+        if (!ReadConsoleInputW(input, &record, 1, &read) || read == 0) {
+            return {ConsoleLineStatus::end, {}, {}};
+        }
+        if (record.EventType != KEY_EVENT || !record.Event.KeyEvent.bKeyDown) continue;
+        const auto &key = record.Event.KeyEvent;
+        const bool control = (key.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) != 0;
+        if ((control && key.wVirtualKeyCode == 'C') || key.uChar.UnicodeChar == 3) {
+            if (!editor.text().empty()) {
+                editor.end();
+                redraw_console_line(output, origin, editor, rendered_size);
+                write_console(output, L"^C");
+            }
+            write_console(output, L"\r\n");
+            return {ConsoleLineStatus::cancelled, {}, {}};
+        }
+        if (key.wVirtualKeyCode == VK_RETURN) {
+            write_console(output, L"\r\n");
+            return {ConsoleLineStatus::line, editor.text(), {}};
+        }
+        bool changed = false;
+        const WORD repeats = (std::max)(key.wRepeatCount, static_cast<WORD>(1));
+        for (WORD repeat = 0; repeat < repeats; ++repeat) {
+            switch (key.wVirtualKeyCode) {
+                case VK_LEFT: changed = editor.left() || changed; break;
+                case VK_RIGHT: changed = editor.right() || changed; break;
+                case VK_HOME: editor.home(); changed = true; break;
+                case VK_END: editor.end(); changed = true; break;
+                case VK_BACK: changed = editor.backspace() || changed; break;
+                case VK_DELETE: changed = editor.erase() || changed; break;
+                case VK_UP: changed = editor.previous(history) || changed; break;
+                case VK_DOWN: changed = editor.next(history) || changed; break;
+                default:
+                    if (key.uChar.UnicodeChar >= L' ') {
+                        editor.insert(key.uChar.UnicodeChar);
+                        changed = true;
+                    }
+                    break;
+            }
+        }
+        if (changed) redraw_console_line(output, origin, editor, rendered_size);
+    }
+}
+
+std::string utf8(const std::wstring &value) {
+    if (value.empty()) return {};
+    const int size = WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()),
+                                         nullptr, 0, nullptr, nullptr);
+    std::string result(static_cast<std::size_t>(size), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()),
+                        result.data(), size, nullptr, nullptr);
+    return result;
+}
+
 int repl(texsolve_context *context, texsolve_context_options options) {
-    std::string line;
-    while (std::cout << "> " && std::getline(std::cin, line)) {
+    std::vector<std::wstring> history;
+    for (;;) {
+        std::string line;
+        if (stdin_is_terminal()) {
+            std::cout.flush();
+            const auto input = read_console_line(history);
+            if (input.status == ConsoleLineStatus::end) return 0;
+            if (input.status == ConsoleLineStatus::cancelled) continue;
+            line = input.utf8_text.empty() ? utf8(input.text) : input.utf8_text;
+            if (!input.text.empty()) history.push_back(input.text);
+        } else {
+            std::cout << "> ";
+            if (!std::getline(std::cin, line)) return 0;
+        }
         if (line == ":quit" || line == ":exit") return 0;
         if (line == ":help backend" || line == ":h backend") {
             print_backend_help();
@@ -277,7 +423,6 @@ int repl(texsolve_context *context, texsolve_context_options options) {
         }
         if (!line.empty()) execute(context, line, TEXSOLVE_OPERATION_AUTO, false);
     }
-    return 0;
 }
 
 int operation_for(std::string_view name) {

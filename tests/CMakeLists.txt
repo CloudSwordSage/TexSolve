@@ -44,5 +44,9 @@ add_test(NAME cli_tests
 set_tests_properties(cli_tests PROPERTIES
   ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:texsolve_shared>")
 
+add_executable(texsolve_repl_line_editor_tests repl_line_editor_tests.cpp)
+target_include_directories(texsolve_repl_line_editor_tests PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME repl_line_editor_tests COMMAND texsolve_repl_line_editor_tests)
+
 add_test(NAME documentation_traceability
   COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${PROJECT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/check_docs.cmake)
