@@ -184,6 +184,30 @@ BOOST_AUTO_TEST_CASE(symbolic_backends_and_calculus_follow_operation_contract) {
     texsolve_context_destroy(context);
 }
 
+BOOST_AUTO_TEST_CASE(finite_folds_work_with_index_i_and_inside_scalar_expressions) {
+    texsolve_context *context = nullptr;
+    BOOST_REQUIRE_EQUAL(texsolve_context_create(&context), TEXSOLVE_STATUS_OK);
+    auto *shifted = execute(context, R"(\sum_{i=1}^{3}(i+1))");
+    BOOST_TEST(text(texsolve_result_exact_latex(shifted)) == "9");
+    texsolve_result_destroy(shifted);
+    auto *squares = execute(context, R"(\sum_{i=1}^{4}i^2)");
+    BOOST_TEST(text(texsolve_result_exact_latex(squares)) == "30");
+    texsolve_result_destroy(squares);
+    auto *largest_index = execute(context,
+        R"(\sum_{i=9223372036854775807}^{9223372036854775807}i)");
+    BOOST_TEST(text(texsolve_result_exact_latex(largest_index)) == "9223372036854775807");
+    texsolve_result_destroy(largest_index);
+    auto *nested = execute(context, R"(1+\sum_{i=1}^{3}i-\prod_{j=1}^{2}j)");
+    BOOST_TEST(text(texsolve_result_exact_latex(nested)) == "5");
+    texsolve_result_destroy(nested);
+    auto *composite = execute(context,
+        R"(\frac{1}{2}x^2+3\cdot x-\sqrt{4}+\sin{0}+\ln{1}+\sum_{i=1}^{3}i-\prod_{j=1}^{2}j)");
+    BOOST_TEST(texsolve_result_kind(composite) == TEXSOLVE_RESULT_SYMBOLIC);
+    BOOST_TEST(text(texsolve_result_exact_latex(composite)).find("x") != std::string::npos);
+    texsolve_result_destroy(composite);
+    texsolve_context_destroy(context);
+}
+
 BOOST_AUTO_TEST_CASE(explicit_operation_rejects_incompatible_top_level_syntax) {
     texsolve_context *context = nullptr;
     BOOST_REQUIRE_EQUAL(texsolve_context_create(&context), TEXSOLVE_STATUS_OK);

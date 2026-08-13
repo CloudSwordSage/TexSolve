@@ -15,7 +15,7 @@ definition    = symbol ":=" expression
 function_head = symbol "(" symbol { "," symbol } ")" ;
 expression    = sum ;
 sum           = product { ("+" | "-") product } ;
-product       = prefix { ("\\cdot" | "\\times" | "/") prefix | implicit prefix } ;
+product       = prefix { ("*" | "\\cdot" | "\\times" | "/") prefix | implicit prefix } ;
 prefix        = ("+" | "-") prefix | power ;
 power         = postfix [ "^" prefix ] ;
 postfix       = primary { "!" } ;
@@ -57,8 +57,8 @@ differential  = "\\,d" symbol ;
 limit         = "\\lim" "_{" symbol "\\to" expression [ side ] "}" expression ;
 side          = "^+" | "^-" ;
 fold_bounds   = "_{" symbol "=" expression "}" "^{" expression "}" ;
-finite_sum    = "\\sum" fold_bounds expression ;
-finite_product= "\\prod" fold_bounds expression ;
+finite_sum    = "\\sum" fold_bounds product ;
+finite_product= "\\prod" fold_bounds product ;
 optimization  = ("\\min" | "\\max") "_{" symbol { "," symbol } "}" group
                 { "," spacing relation } ;
 ode_ivp       = ode_clause { "," spacing ode_clause } "," spacing interval_clause
@@ -117,7 +117,7 @@ integer       = digit { digit } ;
 | 有限求和 | `\sum_{k=1}^{10}k` | `\sum_{k=1}^{\infty}k` |
 | 有限乘积 | `\prod_{k=1}^{5}k` | `\prod_{1}^{5}k` |
 
-多重积分首版只支持 `\iint`；每个微分变量必须唯一。微分符号必须写成 `\,dx`，不接受裸 `dx`，避免被隐式乘法解释为 `d x`。数值退化仅适用于边界完整的定积分。
+多重积分首版只支持 `\iint`；每个微分变量必须唯一。微分符号必须写成 `\,dx`，不接受裸 `dx`，避免被隐式乘法解释为 `d x`。数值退化仅适用于边界完整的定积分。有限求和/乘积的主体默认延伸到下一个加减号；主体包含加减时使用圆括号或花括号分组，例如 `\sum_{i=1}^{3}(i+1)`。
 
 ## 6. 矩阵与方程
 
@@ -151,7 +151,7 @@ integer       = digit { digit } ;
 | 规则 | 合法输入 | 非法输入 |
 |---|---|---|
 | 花括号/圆括号 | `{x+1}`, `(x+1)`, `\left(x+1\right)` | `{x+1`, `\left(x+1)` |
-| 显式乘除 | `2\cdot x`, `2\times x`, `x/2` | `2**x`, `x//2` |
+| 显式乘除 | `2*x`, `2\cdot x`, `2\times x`, `x/2` | `2**x`, `x//2` |
 | `matrix` | `\begin{matrix}1&2\\3&4\end{matrix}` | `\begin{matrix}1&2\end{pmatrix}` |
 | `bmatrix` | `\begin{bmatrix}1&0\\0&1\end{bmatrix}` | `\begin{vmatrix}1\end{vmatrix}` |
 | relation list | `x+y=2,x-y=0` | `x+y=2,` |
