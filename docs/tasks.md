@@ -74,7 +74,7 @@
 ## 5. CLI、安装与整体验收
 
 - [x] **TASK-013 实现动态链接 CLI 与 REPL**
-  - 支持参数、stdin、文件、REPL、子命令、后端/精度设置和 `-debug`。
+  - 支持参数、stdin、文件、REPL、子命令、后端/精度设置和 `--debug`/`-d`。
   - 验证：stdout/stderr、退出码、会话定义和所有输入源。
   - _依赖：TASK-005 至 TASK-012；需求：REQ-003、REQ-011、REQ-012；组件：COMP-1、COMP-2、COMP-10_
 

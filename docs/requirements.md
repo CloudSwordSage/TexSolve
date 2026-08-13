@@ -135,8 +135,9 @@ TexSolve 是面向 Windows x64 的 LaTeX 数学表达式计算引擎。首版同
 
 1. `texsolve` 必须支持位置参数、stdin、UTF-8 文件；无输入源时进入 REPL。
 2. CLI 必须支持自动数学记法和显式 operation 子命令。
-3. 标准输出只承载正常结果；诊断和 `-debug` AST 写入 stderr。
-4. REPL 必须支持列出/清空定义、设置精度、设置后端和退出。
+3. CLI 选项必须同时提供 `--word` 长形式和对应的单字母短形式；帮助、版本、REPL、文件与调试分别为 `--help/-h`、`--version/-v`、`--repl/-r`、`--file/-f`、`--debug/-d`。
+4. 标准输出只承载正常结果；诊断和 `--debug`/`-d` AST 写入 stderr。
+5. REPL 必须支持 `:help`/`:h`、列出/清空定义、设置精度、设置后端和退出。
 
 ### REQ-012 稳定 C ABI 与产物
 

@@ -16,7 +16,7 @@
 | `optimization_tests` | GENERAL/LEAST_SQUARES/AUTO 分派、Ceres/NLopt 能力、约束、未收敛 | REQ-007、REQ-009 |
 | `ode_tests` | 一阶/高阶/系统 IVP、缺初值、DAE 拒绝 | REQ-008 |
 | `abi_tests` | 结构大小、版本、空指针、生命周期、异常屏障 | REQ-010、REQ-012 |
-| `cli_tests` | 参数/stdin/文件/REPL、退出码、`-debug` stderr | REQ-011 |
+| `cli_tests` | 参数/stdin/文件/REPL、帮助/版本、长短选项、退出码、`--debug`/`-d` stderr | REQ-011 |
 | `limit_tests` | 输入、深度、节点、迭代、截止和精度上限 | REQ-013 |
 | `build_consumers` | build-tree/install-tree 静态与动态消费 | REQ-012、REQ-014 |
 
@@ -29,7 +29,7 @@
 - 后端覆盖：显式 Ceres 处理一般不等式约束返回 `BACKEND_UNSUPPORTED`，不得转 NLopt。
 - 方程：`x^4-1=0` 返回四个根；数值超越方程无初值返回 `INVALID_ARGUMENT`。
 - ODE：`\frac{dy}{dt}=y,\;y(0)=1,\;t\in[0,1]` 的终点接近 `e`；缺区间和 DAE 均拒绝。
-- 输出通道：成功结果只在 stdout；`-debug` AST 和诊断只在 stderr。
+- 输出通道：成功结果只在 stdout；`--debug`/`-d` AST 和诊断只在 stderr。
 - 生命周期：销毁 context 后 result 的所有 view 仍可读；销毁 result 后不再访问。
 - 并发：多个 context 并行重复计算结果一致；不测试同一 context 并发，因为契约禁止。
 
@@ -48,7 +48,7 @@
 
 ABI 测试使用 C 编译单元包含公开头，另用 C++ 编译单元验证 `extern "C"`。必须覆盖较小 `struct_size`、较大结构尾部、旧/新 binding 大小与不同 `binding_stride`、binding/residual 数组乘法溢出、residual 空/非空指针与逐项 UTF-8、聚合输入字节预算、错误 ABI 版本、固定枚举数值、diagnostic 最小尺寸、含 NUL 的 view、空 output 和重复销毁约束。结果测试必须分别遍历数学 child 和 metadata accessor，按名称读取根重数/搜索种类、线代精度、优化终止信息及 ODE 步数/终止原因，并验证 context snapshot 的 variables/functions/config schema。重复销毁非空悬空指针不受支持；销毁 NULL 必须安全。
 
-CLI 退出码固定为：0 成功、2 用法/参数、3 解析或语义、4 不支持/无解析解、5 后端未收敛、6 资源/截止、70 内部错误。文件与 stdin 冲突时返回 2。无输入源且 stdin 为终端时进入 REPL；管道空输入返回 2，不进入 REPL。
+CLI 退出码固定为：0 成功、2 用法/参数、3 解析或语义、4 不支持/无解析解、5 后端未收敛、6 资源/截止、70 内部错误。`--help/-h` 与 `--version/-v` 返回 0；文件与 stdin 冲突时返回 2。无输入源且 stdin 为终端时进入 REPL；`--repl/-r` 显式进入 REPL；管道空输入返回 2，不进入 REPL。REPL 的 `:help` 与 `:h` 输出同一命令摘要。
 
 ## 6. 资源与性能
 

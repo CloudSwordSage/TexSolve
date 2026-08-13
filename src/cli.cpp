@@ -1,6 +1,7 @@
 #include "internal.hpp"
 
 #include <charconv>
+#include <cctype>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
@@ -14,6 +15,34 @@
 #include <texsolve/texsolve.h>
 
 namespace {
+
+void print_help() {
+    std::cout <<
+        "Usage: texsolve [options] [operation] [expression]\n"
+        "       texsolve [options] --file <path>\n"
+        "       texsolve --repl\n\n"
+        "Options:\n"
+        "  -h, --help       Show this help\n"
+        "  -v, --version    Show version\n"
+        "  -r, --repl       Start the interactive REPL\n"
+        "  -f, --file PATH  Read an expression from PATH\n"
+        "  -d, --debug      Write the parsed AST to stderr\n"
+        "  --                End option parsing\n\n"
+        "Operations:\n"
+        "  evaluate simplify expand factor differentiate integrate limit\n"
+        "  sum product solve linear optimize ode define\n";
+}
+
+void print_repl_help() {
+    std::cout <<
+        "REPL commands:\n"
+        "  :help, :h                 Show this help\n"
+        "  :definitions              List saved definitions\n"
+        "  :clear                    Clear saved definitions\n"
+        "  :precision DIGITS         Set decimal precision\n"
+        "  :backend CATEGORY NAME    Select a backend\n"
+        "  :quit, :exit              Exit the REPL\n";
+}
 
 int exit_code(texsolve_status status) {
     if (status == TEXSOLVE_STATUS_OK) return 0;
@@ -149,6 +178,10 @@ int repl(texsolve_context *context) {
     std::string line;
     while (std::cout << "> " && std::getline(std::cin, line)) {
         if (line == ":quit" || line == ":exit") return 0;
+        if (line == ":help" || line == ":h") {
+            print_repl_help();
+            continue;
+        }
         if (line == ":clear") {
             texsolve_context_reset(context);
             continue;
@@ -203,25 +236,44 @@ int main(int argc, char **argv) {
     std::string file;
     std::vector<std::string> expressions;
     int operation = TEXSOLVE_OPERATION_AUTO;
+    bool options_ended = false;
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument(argv[index]);
-        if (argument == "-debug") debug = true;
-        else if (argument == "--repl") force_repl = true;
+        if (options_ended) {
+            expressions.emplace_back(argument);
+        } else if (argument == "--") {
+            options_ended = true;
+        } else if (argument == "-h" || argument == "--help") {
+            print_help();
+            texsolve_context_destroy(context);
+            return 0;
+        } else if (argument == "-v" || argument == "--version") {
+            std::cout << "texsolve " << TEXSOLVE_VERSION_MAJOR << '.'
+                      << TEXSOLVE_VERSION_MINOR << '.' << TEXSOLVE_VERSION_PATCH << '\n';
+            texsolve_context_destroy(context);
+            return 0;
+        } else if (argument == "-d" || argument == "--debug") debug = true;
+        else if (argument == "-r" || argument == "--repl") force_repl = true;
         else if (argument == "-f" || argument == "--file") {
             if (++index >= argc) {
+                std::cerr << "missing path after " << argument << '\n';
                 texsolve_context_destroy(context);
                 return 2;
             }
             file = argv[index];
         } else if (const int selected = operation_for(argument); selected >= 0 && expressions.empty()) {
             operation = selected;
-        } else if (argument.starts_with("--")) {
+        } else if (argument.starts_with("--") ||
+                   (argument.size() > 1 && argument.front() == '-' &&
+                    std::isalpha(static_cast<unsigned char>(argument[1])))) {
+            std::cerr << "unknown option: " << argument << '\n';
             texsolve_context_destroy(context);
             return 2;
         } else expressions.emplace_back(argument);
     }
     if (force_repl) {
-        if (!file.empty() || !expressions.empty()) {
+        if (!file.empty() || !expressions.empty() || debug || operation != TEXSOLVE_OPERATION_AUTO) {
+            std::cerr << "--repl cannot be combined with input, operation, or debug options\n";
             texsolve_context_destroy(context);
             return 2;
         }

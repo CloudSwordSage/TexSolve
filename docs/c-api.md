@@ -174,4 +174,4 @@ typedef struct texsolve_diagnostic {
 
 ## 8. CLI 对 ABI 的使用
 
-CLI 的计算、定义、配置和定义列表只调用本规范函数；默认链接共享目标。`-debug` 由 CLI 在调用 ABI 前访问内部解析调试入口完成，该入口不安装、不导出且不属于 ABI。静态消费测试使用同一头并定义 `TEXSOLVE_STATIC`。
+CLI 的计算、定义、配置和定义列表只调用本规范函数；默认链接共享目标。`--debug`/`-d` 由 CLI 在调用 ABI 前访问内部解析调试入口完成，该入口不安装、不导出且不属于 ABI。静态消费测试使用同一头并定义 `TEXSOLVE_STATIC`。
