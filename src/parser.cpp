@@ -222,7 +222,10 @@ private:
             else if (consume("\\times")) op = "\\times";
             else if (consume("*")) op = "*";
             else if (consume("/")) op = "/";
-            else if (starts_primary() && (!had_space || starts("\\") || starts("("))) op = "implicit";
+            else if (starts_primary() &&
+                     (!had_space || starts("\\") || starts("(") ||
+                      (left->kind == NodeKind::Binary &&
+                       std::isalpha(static_cast<unsigned char>(input_[pos_]))))) op = "implicit";
             else break;
             auto right = parse_prefix();
             if (!right) return fail_node("missing factor", pos_);
@@ -409,10 +412,10 @@ private:
         const bool derivative = numerator_text->starts_with("d") || numerator_text->starts_with("\\partial");
         if (derivative) {
             const auto numerator_order = derivative_order(*numerator_text);
-            const auto denominator_order = derivative_denominator_order(*denominator_text);
+            const auto derivative_variables = derivative_denominator_variables(*denominator_text);
             const bool partial = numerator_text->starts_with("\\partial");
             if (partial != denominator_text->starts_with("\\partial") || !numerator_order ||
-                !denominator_order || *numerator_order != *denominator_order) {
+                !derivative_variables || *numerator_order != derivative_variables->size()) {
                 return fail_node("derivative orders do not match", start);
             }
             const bool ode_lhs = !partial && *numerator_text != "d" &&
@@ -421,7 +424,12 @@ private:
                                      start, pos_);
             auto body = starts("{") ? parse_group('{', '}') : std::nullopt;
             if (!body) return fail_node("derivative requires an expression", pos_);
-            return make(NodeKind::Derivative, *denominator_text, start, body->end, {std::move(*body)});
+            std::string variables;
+            for (const auto &variable : *derivative_variables) {
+                if (!variables.empty()) variables += ',';
+                variables += variable;
+            }
+            return make(NodeKind::Derivative, std::move(variables), start, body->end, {std::move(*body)});
         }
         pos_ = saved;
         auto numerator = parse_group('{', '}');
@@ -439,11 +447,43 @@ private:
         return parse_positive_integer(digits);
     }
 
-    std::optional<unsigned> derivative_denominator_order(std::string_view text) const {
-        if (!(text.starts_with("d") || text.starts_with("\\partial"))) return std::nullopt;
-        const auto marker = text.find('^');
-        return marker == std::string_view::npos ? std::optional<unsigned>(1)
-                                                : parse_positive_integer(text.substr(marker + 1));
+    std::optional<std::vector<std::string>> derivative_denominator_variables(std::string_view text) const {
+        const bool partial = text.starts_with("\\partial");
+        if (!partial && !text.starts_with("d")) return std::nullopt;
+        std::vector<std::string> variables;
+        std::size_t position = 0;
+        do {
+            while (position < text.size() && std::isspace(static_cast<unsigned char>(text[position]))) ++position;
+            const std::string_view prefix = partial ? "\\partial" : "d";
+            if (!text.substr(position).starts_with(prefix)) return std::nullopt;
+            position += prefix.size();
+            while (position < text.size() && std::isspace(static_cast<unsigned char>(text[position]))) ++position;
+            const std::size_t variable_start = position;
+            if (position < text.size() && text[position] == '\\') {
+                ++position;
+                while (position < text.size() && std::isalpha(static_cast<unsigned char>(text[position]))) ++position;
+            } else if (position < text.size() && std::isalpha(static_cast<unsigned char>(text[position]))) {
+                ++position;
+            } else {
+                return std::nullopt;
+            }
+            const std::string variable(text.substr(variable_start, position - variable_start));
+            while (position < text.size() && std::isspace(static_cast<unsigned char>(text[position]))) ++position;
+            unsigned order = 1;
+            if (position < text.size() && text[position] == '^') {
+                const std::size_t order_start = ++position;
+                while (position < text.size() && std::isdigit(static_cast<unsigned char>(text[position]))) ++position;
+                const auto parsed_order = parse_positive_integer(text.substr(order_start, position - order_start));
+                if (!parsed_order) return std::nullopt;
+                order = *parsed_order;
+            }
+            if (order > max_depth_ - std::min<std::size_t>(variables.size(), max_depth_)) return std::nullopt;
+            variables.insert(variables.end(), order, variable);
+            while (position < text.size() && std::isspace(static_cast<unsigned char>(text[position]))) ++position;
+        } while (partial && position < text.size());
+        return position == text.size() && !variables.empty()
+                   ? std::optional<std::vector<std::string>>(std::move(variables))
+                   : std::nullopt;
     }
 
     std::optional<Node> parse_sqrt() {
@@ -626,6 +666,7 @@ private:
         consume("\\lim");
         if (!consume("_{")) return fail_node("limit requires a subscript", pos_);
         const auto variable = parse_symbol_text();
+        skip_space();
         if (!variable || !consume("\\to")) return fail_node("limit requires \\to", pos_);
         limit_target_ = true;
         auto target = parse_expression();

@@ -100,6 +100,41 @@ BOOST_AUTO_TEST_CASE(linear_algebra_returns_structured_results) {
     BOOST_TEST(text(texsolve_result_exact_latex(symbolic)) == "x");
     texsolve_result_destroy(symbolic);
 
+    auto *symbolic_eigenvalues = run(context,
+        R"(\operatorname{eigenvalues}\begin{pmatrix}a&b\\b&c\end{pmatrix})",
+        TEXSOLVE_OPERATION_LINEAR_ALGEBRA);
+    BOOST_TEST(texsolve_result_kind(symbolic_eigenvalues) == TEXSOLVE_RESULT_LIST);
+    BOOST_REQUIRE_EQUAL(texsolve_result_child_count(symbolic_eigenvalues), 2u);
+    for (std::size_t index = 0; index < 2; ++index) {
+        const auto exact = text(texsolve_result_exact_latex(
+            texsolve_result_child(symbolic_eigenvalues, index)));
+        BOOST_TEST(exact.find("a") != std::string::npos);
+        BOOST_TEST(exact.find("c") != std::string::npos);
+        BOOST_TEST(exact.find(R"(\sqrt)") != std::string::npos);
+    }
+    texsolve_result_destroy(symbolic_eigenvalues);
+
+    auto *repeated_symbolic_eigenvalue = run(context,
+        R"(\operatorname{eigenvalues}\begin{pmatrix}a&0\\0&a\end{pmatrix})",
+        TEXSOLVE_OPERATION_LINEAR_ALGEBRA);
+    BOOST_TEST(text(texsolve_result_backend(repeated_symbolic_eigenvalue)) == "symengine");
+    BOOST_REQUIRE_EQUAL(texsolve_result_child_count(repeated_symbolic_eigenvalue), 2u);
+    BOOST_TEST(text(texsolve_result_exact_latex(
+        texsolve_result_child(repeated_symbolic_eigenvalue, 0))) == "a");
+    BOOST_TEST(text(texsolve_result_exact_latex(
+        texsolve_result_child(repeated_symbolic_eigenvalue, 1))) == "a");
+    texsolve_result_destroy(repeated_symbolic_eigenvalue);
+
+    auto *triple_symbolic_eigenvalue = run(context,
+        R"(\operatorname{eigenvalues}\begin{pmatrix}a&0&0\\0&a&0\\0&0&a\end{pmatrix})",
+        TEXSOLVE_OPERATION_LINEAR_ALGEBRA);
+    BOOST_REQUIRE_EQUAL(texsolve_result_child_count(triple_symbolic_eigenvalue), 3u);
+    for (std::size_t index = 0; index < 3; ++index) {
+        BOOST_TEST(text(texsolve_result_exact_latex(
+            texsolve_result_child(triple_symbolic_eigenvalue, index))) == "a");
+    }
+    texsolve_result_destroy(triple_symbolic_eigenvalue);
+
     const std::string precision_input = R"(\det\begin{pmatrix}1&2\\3&4\end{pmatrix})";
     texsolve_request precision_request{};
     precision_request.struct_size = sizeof(precision_request);

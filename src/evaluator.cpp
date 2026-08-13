@@ -40,6 +40,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace texsolve {
 namespace {
@@ -91,6 +92,7 @@ const Node *real_symbol_square_base(const Node &node) {
 
 std::string symbol_name(std::string value) {
     if (value == "\\pi") return "pi";
+    if (value == "\\infty") return "oo";
     if (value == "e") return "E";
     if (value == "i") return "I";
     if (!value.empty() && value.front() == '\\') value.erase(value.begin());
@@ -98,13 +100,58 @@ std::string symbol_name(std::string value) {
     return value;
 }
 
-std::string variable_from_derivative(std::string text) {
+std::string normalize_derivative_variable(std::string text) {
     if (text.starts_with("\\partial")) text.erase(0, 8);
     else if (!text.empty() && text.front() == 'd') text.erase(0, 1);
     text.erase(std::remove_if(text.begin(), text.end(), [](char ch) {
         return ch == ' ' || ch == '^' || std::isdigit(static_cast<unsigned char>(ch));
     }), text.end());
     return symbol_name(text);
+}
+
+std::vector<std::string> variables_from_derivative(std::string_view text) {
+    std::vector<std::string> variables;
+    for (std::size_t begin = 0; begin <= text.size();) {
+        const auto end = text.find(',', begin);
+        variables.push_back(normalize_derivative_variable(
+            std::string(text.substr(begin, end == std::string_view::npos ? text.size() - begin : end - begin))));
+        if (end == std::string_view::npos) break;
+        begin = end + 1;
+    }
+    return variables;
+}
+
+const Node *odd_root_power_base(const Node &radicand, std::string_view degree) {
+    if (degree.empty() || (degree.back() - '0') % 2 == 0 ||
+        radicand.kind != NodeKind::Binary || radicand.text != "^" ||
+        radicand.children.size() != 2 || radicand.children[1].kind != NodeKind::Integer ||
+        radicand.children[1].text != degree) {
+        return nullptr;
+    }
+    const Node &base = radicand.children[0];
+    return base.kind == NodeKind::Symbol && base.text != "i" ? &base : nullptr;
+}
+
+bool is_provably_real(const Node &node) {
+    if (node.kind == NodeKind::Integer || node.kind == NodeKind::Real) return true;
+    if (node.kind == NodeKind::Symbol) return node.text == "\\pi" || node.text == "e";
+    if (node.kind == NodeKind::Unary && node.children.size() == 1) {
+        return is_provably_real(node.children.front());
+    }
+    if (node.kind == NodeKind::Binary && node.children.size() == 2) {
+        if (node.text == "^") {
+            return is_provably_real(node.children[0]) &&
+                   node.children[1].kind == NodeKind::Integer;
+        }
+        return is_provably_real(node.children[0]) && is_provably_real(node.children[1]);
+    }
+    return false;
+}
+
+bool real_symbol(const Node &symbol, const std::map<std::string, Node> *bindings) {
+    if (bindings == nullptr) return false;
+    const auto binding = bindings->find(symbol.text);
+    return binding == bindings->end() || is_provably_real(binding->second);
 }
 
 int classify_symengine(const Basic &expression) {
@@ -237,7 +284,15 @@ std::optional<RCP<const Basic>> analytic_limit(const Node &root,
         const auto numerator_value = numerator->subs({{variable, target}});
         const auto denominator_value = denominator->subs({{variable, target}});
         if (!SymEngine::is_number_and_zero(*denominator_value)) {
-            return SymEngine::div(numerator_value, denominator_value);
+            const auto quotient = SymEngine::div(numerator_value, denominator_value);
+            const auto rendered = SymEngine::str(*quotient);
+            if (rendered != "nan" && rendered != "NaN" &&
+                rendered.find("ComplexInf") == std::string::npos) {
+                return quotient;
+            }
+            numerator = numerator->diff(variable);
+            denominator = denominator->diff(variable);
+            continue;
         }
         if (!SymEngine::is_number_and_zero(*numerator_value)) {
             if (direction.empty()) return std::nullopt;
@@ -435,6 +490,23 @@ std::optional<RCP<const Basic>> scalar_expression(
         return SymEngine::mul(*left, *right);
     }
     if (node.kind == NodeKind::Call) {
+        if (node.text.starts_with("sqrt:") && node.children.size() == 1) {
+            const std::string_view degree(node.text.data() + 5, node.text.size() - 5);
+            if (const Node *base = odd_root_power_base(node.children.front(), degree);
+                base != nullptr && real_symbol(*base, &bindings)) {
+                return scalar_expression(*base, bindings, locals, max_iterations, iterations, deadline, error);
+            }
+            const Node &radicand = node.children.front();
+            if (radicand.kind == NodeKind::Call && radicand.text.starts_with("sqrt:") &&
+                radicand.children.size() == 1 && radicand.children.front().kind == NodeKind::Symbol &&
+                !bindings.contains(radicand.children.front().text)) {
+                auto value = scalar_expression(radicand.children.front(), bindings, locals, max_iterations,
+                                               iterations, deadline, error);
+                if (!value) return std::nullopt;
+                return SymEngine::pow(*value, SymEngine::parse(
+                    "1/(" + std::string(degree) + "*" + radicand.text.substr(5) + ")"));
+            }
+        }
         if (node.text == "sqrt:2" && node.children.size() == 1) {
             const Node &radicand = node.children.front();
             const Node *base = real_symbol_square_base(radicand);
@@ -567,10 +639,10 @@ Evaluation evaluate_symengine(const Node &root, int32_t operation,
     }
 
     const Node *expression_node = &root;
-    std::string derivative_variable;
+    std::vector<std::string> derivative_variables;
     if (root.kind == NodeKind::Derivative) {
         expression_node = &root.children.front();
-        derivative_variable = variable_from_derivative(root.text);
+        derivative_variables = variables_from_derivative(root.text);
     }
     RCP<const Basic> expression;
     if (contains_fold(*expression_node)) {
@@ -584,8 +656,10 @@ Evaluation evaluate_symengine(const Node &root, int32_t operation,
         expression = symengine_expression(*expression_node, bindings);
     }
     if (root.kind == NodeKind::Derivative || operation == TEXSOLVE_OPERATION_DIFFERENTIATE) {
-        if (derivative_variable.empty()) derivative_variable = "x";
-        expression = expression->diff(SymEngine::symbol(derivative_variable));
+        if (derivative_variables.empty()) derivative_variables.push_back("x");
+        for (const auto &variable : derivative_variables) {
+            expression = expression->diff(SymEngine::symbol(variable));
+        }
     } else if (operation == TEXSOLVE_OPERATION_EXPAND) {
         expression = SymEngine::expand(expression);
     }
@@ -610,10 +684,10 @@ Evaluation evaluate_ginac(const Node &root, int32_t operation,
         return result;
     }
     const Node *expression_node = &root;
-    std::string derivative_variable;
+    std::vector<std::string> derivative_variables;
     if (root.kind == NodeKind::Derivative) {
         expression_node = &root.children.front();
-        derivative_variable = variable_from_derivative(root.text);
+        derivative_variables = variables_from_derivative(root.text);
     }
     GiNaC::parser parser;
     GiNaC::ex expression = parser(to_backend_syntax(*expression_node, &bindings));
@@ -621,10 +695,14 @@ Evaluation evaluate_ginac(const Node &root, int32_t operation,
         expression = expression.subs(parser(symbol_name(name)) == parser(to_backend_syntax(value)));
     }
     if (root.kind == NodeKind::Derivative || operation == TEXSOLVE_OPERATION_DIFFERENTIATE) {
-        if (derivative_variable.empty()) derivative_variable = "x";
-        const auto symbol_expression = parser(derivative_variable);
-        if (!GiNaC::is_a<GiNaC::symbol>(symbol_expression)) throw std::runtime_error("invalid derivative variable");
-        expression = expression.diff(GiNaC::ex_to<GiNaC::symbol>(symbol_expression));
+        if (derivative_variables.empty()) derivative_variables.push_back("x");
+        for (const auto &variable : derivative_variables) {
+            const auto symbol_expression = parser(variable);
+            if (!GiNaC::is_a<GiNaC::symbol>(symbol_expression)) {
+                throw std::runtime_error("invalid derivative variable");
+            }
+            expression = expression.diff(GiNaC::ex_to<GiNaC::symbol>(symbol_expression));
+        }
     } else if (operation == TEXSOLVE_OPERATION_EXPAND) {
         expression = expression.expand();
     } else if (operation == TEXSOLVE_OPERATION_FACTOR) {
@@ -680,6 +758,18 @@ std::string to_backend_syntax(const Node &node,
         }
         case NodeKind::Call: {
             if (node.text.starts_with("sqrt:")) {
+                const std::string_view degree(node.text.data() + 5, node.text.size() - 5);
+                if (const Node *base = odd_root_power_base(node.children.front(), degree);
+                    base != nullptr && real_symbol(*base, real_bindings)) {
+                    return to_backend_syntax(*base, real_bindings);
+                }
+                const Node &radicand = node.children.front();
+                if (radicand.kind == NodeKind::Call && radicand.text.starts_with("sqrt:") &&
+                    radicand.children.size() == 1 && radicand.children.front().kind == NodeKind::Symbol &&
+                    real_bindings != nullptr && !real_bindings->contains(radicand.children.front().text)) {
+                    return "(" + to_backend_syntax(radicand.children.front(), real_bindings) + ")^(1/(" +
+                           std::string(degree) + "*" + radicand.text.substr(5) + "))";
+                }
                 if (node.text == "sqrt:2") {
                     const Node &radicand = node.children.front();
                     if (const Node *base = real_symbol_square_base(radicand);

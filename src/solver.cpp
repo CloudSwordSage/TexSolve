@@ -248,6 +248,13 @@ bool is_matrix_expression(const Node &node) {
            (is_matrix_expression(node.children[0]) || is_matrix_expression(node.children[1]));
 }
 
+bool contains_free_symbol(const Node &node) {
+    if (node.kind == NodeKind::Symbol) {
+        return node.text != "\\pi" && node.text != "e" && node.text != "i" && node.text != "T";
+    }
+    return std::any_of(node.children.begin(), node.children.end(), contains_free_symbol);
+}
+
 SymEngine::DenseMatrix symbolic_matrix(const Node &node) {
     if (node.kind == NodeKind::Matrix && !node.children.empty()) {
         const unsigned rows = static_cast<unsigned>(node.children.size());
@@ -328,7 +335,11 @@ SolverNode matrix_node(const Eigen::MatrixXd &matrix) {
     return result;
 }
 
-SolverOutput solve_linear(const Node &root) {
+SolverOutput solve_linear(const Node &root, uint32_t deadline_ms) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(deadline_ms);
+    const auto deadline_exceeded = [&] {
+        return std::chrono::steady_clock::now() >= deadline;
+    };
     try {
         if (root.kind == NodeKind::Matrix || root.kind == NodeKind::Binary) {
             SolverOutput output;
@@ -360,15 +371,54 @@ SolverOutput solve_linear(const Node &root) {
             matrix.inv(inverse);
             output.root = matrix_node(inverse);
         } else if (root.text == "eigenvalues") {
-            const Eigen::MatrixXd matrix = matrix_value(root.children.front());
-            if (matrix.rows() != matrix.cols()) return failure(TEXSOLVE_STATUS_SEMANTIC_ERROR,
-                TEXSOLVE_DIAGNOSTIC_DIMENSION_MISMATCH, "eigenvalues require a square matrix");
-            Eigen::EigenSolver<Eigen::MatrixXd> eigen(matrix, false);
             output.root.kind = TEXSOLVE_RESULT_LIST;
-            output.root.backend = "eigen";
-            for (Eigen::Index index = 0; index < eigen.eigenvalues().size(); ++index) {
-                const auto value = eigen.eigenvalues()[index];
-                output.root.children.push_back(complex_scalar({}, value.real(), value.imag()));
+            if (contains_free_symbol(root.children.front())) {
+                if (deadline_exceeded()) return failure(TEXSOLVE_STATUS_DEADLINE_EXCEEDED,
+                    TEXSOLVE_DIAGNOSTIC_DEADLINE, "symbolic eigenvalue deadline exceeded");
+                const auto matrix = symbolic_matrix(root.children.front());
+                if (!matrix.is_square()) return failure(TEXSOLVE_STATUS_SEMANTIC_ERROR,
+                    TEXSOLVE_DIAGNOSTIC_DIMENSION_MISMATCH, "eigenvalues require a square matrix");
+                output.root.backend = "symengine";
+                if (matrix.nrows() != 2) {
+                    bool diagonal = true;
+                    for (unsigned row = 0; row < matrix.nrows(); ++row) {
+                        for (unsigned col = 0; col < matrix.ncols(); ++col) {
+                            if (row != col && !SymEngine::is_number_and_zero(*matrix.get(row, col))) {
+                                diagonal = false;
+                            }
+                        }
+                    }
+                    if (!diagonal) {
+                        return failure(TEXSOLVE_STATUS_BACKEND_UNSUPPORTED,
+                            TEXSOLVE_DIAGNOSTIC_BACKEND_CAPABILITY,
+                            "exact symbolic eigenvalues currently require a 2x2 or diagonal matrix");
+                    }
+                    for (unsigned index = 0; index < matrix.nrows(); ++index) {
+                        output.root.children.push_back(basic_scalar({}, *matrix.get(index, index)));
+                    }
+                } else {
+                    const auto trace = SymEngine::add(matrix.get(0, 0), matrix.get(1, 1));
+                    const auto discriminant = SymEngine::sub(
+                        SymEngine::pow(trace, SymEngine::integer(2)),
+                        SymEngine::mul(SymEngine::integer(4), matrix.det()));
+                    const auto radical = SymEngine::sqrt(discriminant);
+                    output.root.children.push_back(basic_scalar({}, *SymEngine::div(
+                        SymEngine::sub(trace, radical), SymEngine::integer(2))));
+                    output.root.children.push_back(basic_scalar({}, *SymEngine::div(
+                        SymEngine::add(trace, radical), SymEngine::integer(2))));
+                }
+                if (deadline_exceeded()) return failure(TEXSOLVE_STATUS_DEADLINE_EXCEEDED,
+                    TEXSOLVE_DIAGNOSTIC_DEADLINE, "symbolic eigenvalue deadline exceeded");
+            } else {
+                output.root.backend = "eigen";
+                const Eigen::MatrixXd matrix = matrix_value(root.children.front());
+                if (matrix.rows() != matrix.cols()) return failure(TEXSOLVE_STATUS_SEMANTIC_ERROR,
+                    TEXSOLVE_DIAGNOSTIC_DIMENSION_MISMATCH, "eigenvalues require a square matrix");
+                Eigen::EigenSolver<Eigen::MatrixXd> eigen(matrix, false);
+                for (Eigen::Index index = 0; index < eigen.eigenvalues().size(); ++index) {
+                    const auto value = eigen.eigenvalues()[index];
+                    output.root.children.push_back(complex_scalar({}, value.real(), value.imag()));
+                }
             }
         } else if (root.text == "eigenvectors") {
             const Eigen::MatrixXd matrix = matrix_value(root.children.front());
@@ -1149,7 +1199,7 @@ SolverOutput solve_problem(const Node &root, int32_t operation,
                            const std::map<std::string, Node> &upper_bounds) {
     if (operation == TEXSOLVE_OPERATION_LINEAR_ALGEBRA) {
         return linear_backend == TEXSOLVE_LINEAR_ALGEBRA_ARMADILLO
-                   ? solve_linear_armadillo(root) : solve_linear(root);
+                   ? solve_linear_armadillo(root) : solve_linear(root, deadline_ms);
     }
     if (operation == TEXSOLVE_OPERATION_SOLVE) {
         return solve_equation(root, bindings, max_iterations, deadline_ms);

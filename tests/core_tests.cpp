@@ -45,6 +45,12 @@ BOOST_AUTO_TEST_CASE(limits_and_integrals_follow_analytic_then_numeric_policy) {
     auto *left_limit = execute(context, R"(\lim_{x\to 0^-}\frac{1}{x})");
     BOOST_TEST(text(texsolve_result_exact_latex(left_limit)) == R"(-\infty)");
     texsolve_result_destroy(left_limit);
+    auto *infinite_limit = execute(context, R"(\lim_{x \to \infty} \frac{1}{x})");
+    BOOST_TEST(text(texsolve_result_exact_latex(infinite_limit)) == "0");
+    texsolve_result_destroy(infinite_limit);
+    auto *infinite_ratio = execute(context, R"(\lim_{x \to \infty}\frac{x+1}{x})");
+    BOOST_TEST(text(texsolve_result_exact_latex(infinite_ratio)) == "1");
+    texsolve_result_destroy(infinite_ratio);
 
     auto *double_integral = execute(context, R"(\iint_{0}^{1}xy\,dx\,dy)");
     BOOST_TEST(text(texsolve_result_exact_latex(double_integral)) == R"(\frac{1}{4})");
@@ -105,6 +111,16 @@ BOOST_AUTO_TEST_CASE(finite_decimals_and_real_square_roots_are_simplified_exactl
     BOOST_TEST(exact.find(R"(\sqrt)") == std::string::npos);
     texsolve_result_destroy(root);
 
+    auto *odd_root = execute(context, R"(\sqrt[3]{x^3})");
+    BOOST_TEST(text(texsolve_result_exact_latex(odd_root)) == "x");
+    texsolve_result_destroy(odd_root);
+    auto *nested_root = execute(context, R"(\sqrt{\sqrt{x}})");
+    const auto nested_exact = text(texsolve_result_exact_latex(nested_root));
+    const bool nested_normalized =
+        nested_exact == R"(x^{\frac{1}{4}})" || nested_exact == R"(\sqrt[4]{x})";
+    BOOST_TEST(nested_normalized);
+    texsolve_result_destroy(nested_root);
+
     const std::string expression = R"(\sqrt{9/(x*x)})";
     const std::string name = "x";
     const std::string value = "i";
@@ -122,6 +138,23 @@ BOOST_AUTO_TEST_CASE(finite_decimals_and_real_square_roots_are_simplified_exactl
     texsolve_result *complex = nullptr;
     BOOST_REQUIRE_EQUAL(texsolve_execute(context, &request, &complex), TEXSOLVE_STATUS_OK);
     BOOST_TEST(texsolve_result_kind(complex) == TEXSOLVE_RESULT_COMPLEX);
+    texsolve_result_destroy(complex);
+
+    const std::string odd_expression = R"(\sqrt[3]{x^3})";
+    const std::string real_value = "-2";
+    complex_binding.value_latex = {real_value.data(), real_value.size()};
+    request.latex = {odd_expression.data(), odd_expression.size()};
+    BOOST_REQUIRE_EQUAL(texsolve_execute(context, &request, &complex), TEXSOLVE_STATUS_OK);
+    BOOST_TEST(text(texsolve_result_exact_latex(complex)) == "-2");
+    texsolve_result_destroy(complex);
+    complex_binding.value_latex = {value.data(), value.size()};
+    BOOST_REQUIRE_EQUAL(texsolve_execute(context, &request, &complex), TEXSOLVE_STATUS_OK);
+    BOOST_TEST(text(texsolve_result_exact_latex(complex)) != "i");
+    texsolve_result_destroy(complex);
+    const std::string nonreal_value = "(-1)^0.5";
+    complex_binding.value_latex = {nonreal_value.data(), nonreal_value.size()};
+    BOOST_REQUIRE_EQUAL(texsolve_execute(context, &request, &complex), TEXSOLVE_STATUS_OK);
+    BOOST_TEST(text(texsolve_result_exact_latex(complex)) != "i");
     texsolve_result_destroy(complex);
     texsolve_context_destroy(context);
 }
@@ -207,6 +240,12 @@ BOOST_AUTO_TEST_CASE(symbolic_backends_and_calculus_follow_operation_contract) {
     auto *derivative = execute(context, R"(\frac{d}{dx}{x^3})");
     BOOST_TEST(text(texsolve_result_exact_latex(derivative)).find("3") != std::string::npos);
     texsolve_result_destroy(derivative);
+    auto *mixed = execute(context, R"(\frac{\partial^2}{\partial x \partial y}{x^2 y^3})");
+    const auto mixed_exact = text(texsolve_result_exact_latex(mixed));
+    BOOST_TEST(mixed_exact.find("6") != std::string::npos);
+    BOOST_TEST(mixed_exact.find("x") != std::string::npos);
+    BOOST_TEST(mixed_exact.find("y^2") != std::string::npos);
+    texsolve_result_destroy(mixed);
     auto *integral = execute(context, R"(\int x^2\,dx)");
     BOOST_TEST(text(texsolve_result_exact_latex(integral)).find("x") != std::string::npos);
     texsolve_result_destroy(integral);

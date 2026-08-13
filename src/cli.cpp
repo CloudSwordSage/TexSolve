@@ -124,6 +124,12 @@ int execute(texsolve_context *context, std::string_view input, int operation, bo
     if (status == TEXSOLVE_STATUS_OK && result != nullptr) {
         print_result(result);
         print_metadata(result, "domain");
+        if (text(texsolve_result_exact_latex(result)).empty() &&
+            !text(texsolve_result_approximation(result)).empty()) {
+            const auto backend = text(texsolve_result_backend(result));
+            if (!backend.empty()) std::cout << "  backend: " << backend << '\n';
+            print_metadata(result, "precision_digits");
+        }
     }
     if (result != nullptr) {
         for (std::size_t index = 0; index < texsolve_result_diagnostic_count(result); ++index) {

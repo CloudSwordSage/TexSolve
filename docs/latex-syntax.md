@@ -49,7 +49,8 @@ matrix        = "\\begin{" matrix_env "}" row { "\\\\" row }
 row           = expression { "&" expression } ;
 derivative    = "\\frac" "{d" [ "^" integer ] "}" "{d" symbol [ "^" integer ] "}" group
               | "\\frac" "{\\partial" [ "^" integer ] "}"
-                "{\\partial" symbol [ "^" integer ] "}" group ;
+                "{" partial_factor { partial_factor } "}" group ;
+partial_factor= "\\partial" symbol [ "^" integer ] ;
 integral      = "\\int" [ bounds ] expression differential
               | "\\iint" [ bounds ] expression differential differential ;
 bounds        = "_" group "^" group ;
@@ -90,9 +91,9 @@ integer       = digit { digit } ;
 | 分数 | `\frac{1}{x+1}` | `\frac{1}` |
 | 根式 | `\sqrt{x}`, `\sqrt[3]{8}` | `\sqrt[0]{x}` |
 | 幂/阶乘 | `x^{2}`, `5!` | `x^`, `(-1.2)!` |
-| 隐式乘法 | `2x`, `x(y+1)` | `2 3`, `f x` |
+| 隐式乘法 | `2x`, `x(y+1)`, `x^2 y^3` | `2 3`, `f x` |
 
-有限十进制按精确有理数解释，例如 `0.5` 等价于 `\frac{1}{2}`，不会仅因出现小数点而切换到数值求解。未绑定的普通符号在标量化简中采用实数域，平方根按主值化简，例如 `\sqrt{x^2}=\left|x\right|`；显式绑定的值保留其实际数域。未提供 `x>0` 假设时不得进一步写成 `x`，因此 `\sqrt{9/(x*x)}+1/x` 的无条件实数形式含 `3/\left|x\right|`，而不是 `4/x`。
+有限十进制按精确有理数解释，例如 `0.5` 等价于 `\frac{1}{2}`，不会仅因出现小数点而切换到数值求解。未绑定的普通符号在标量化简中采用实数域，平方根按主值化简，例如 `\sqrt{x^2}=\left|x\right|`；奇数次根与同次幂互逆，例如 `\sqrt[3]{x^3}=x`；嵌套主根合并次数，例如 `\sqrt{\sqrt{x}}=\sqrt[4]{x}`。显式绑定的值保留其实际数域。未提供 `x>0` 假设时不得进一步写成 `x`，因此 `\sqrt{9/(x*x)}+1/x` 的无条件实数形式含 `3/\left|x\right|`，而不是 `4/x`。
 
 ## 4. 函数白名单
 
@@ -111,11 +112,11 @@ integer       = digit { digit } ;
 | 规则 | 合法输入 | 非法输入 |
 |---|---|---|
 | 导数 | `\frac{d}{dx}{x^2}`, `\frac{d^2}{dx^2}{x^3}` | `\frac{d^2}{dx}{x}` |
-| 偏导 | `\frac{\partial}{\partial x}{xy}` | `\frac{\partial}{dx}{xy}` |
+| 偏导 | `\frac{\partial}{\partial x}{xy}`, `\frac{\partial^2}{\partial x \partial y}{x^2 y^3}` | `\frac{\partial}{dx}{xy}` |
 | 不定积分 | `\int x^2\,dx` | `\int x^2` |
 | 定积分 | `\int_{0}^{1}x^2\,dx` | `\int_{0}x\,dx` |
 | 多重积分 | `\iint_{0}^{1}xy\,dx\,dy` | `\iiint xyz\,dx\,dy\,dz` |
-| 极限 | `\lim_{x\to 0}\frac{\sin{x}}{x}` | `\lim_{x=0}x` |
+| 极限 | `\lim_{x\to 0}\frac{\sin{x}}{x}`, `\lim_{x \to \infty}\frac{1}{x}` | `\lim_{x=0}x` |
 | 有限求和 | `\sum_{k=1}^{10}k` | `\sum_{k=1}^{\infty}k` |
 | 有限乘积 | `\prod_{k=1}^{5}k` | `\prod_{1}^{5}k` |
 
@@ -132,7 +133,7 @@ integer       = digit { digit } ;
 | 方程组 | `\begin{cases}x+y=2\\x-y=0\end{cases}` | `\begin{cases}x+y\end{cases}` |
 | 不等式 | `x^2\le 4` | `x<>2` |
 
-`\det`、`\operatorname{rank}`、`\operatorname{inv}`、`\operatorname{eigenvalues}` 和 `\operatorname{eigenvectors}` 是矩阵操作白名单。线性求解使用 relation set；不存在赋值语句中的链式等号。
+`\det`、`\operatorname{rank}`、`\operatorname{inv}`、`\operatorname{eigenvalues}` 和 `\operatorname{eigenvectors}` 是矩阵操作白名单。含自由符号的 2×2 矩阵与任意阶对角矩阵经 SymEngine 符号适配器计算精确特征值，保留代数重数，并在 result backend 中报告 `symengine`；其他高阶符号矩阵返回 `BACKEND_UNSUPPORTED`。纯数值矩阵使用所选线性代数后端。线性求解使用 relation set；不存在赋值语句中的链式等号。
 
 有限乘积 `\prod_{i=1}^{x}i` 的符号上界求解域为正整数，结果 metadata 必须显式给出 `x \in \mathbb{Z}_{>0}`。三角方程参数化通解使用整数参数定义域，例如 `\sin{x}=0` 返回 `x=n\pi` 的根值及 `n \in \mathbb{Z}`，不得把整数参数写成 `(-\infty,\infty)`。
 
