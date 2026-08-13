@@ -28,6 +28,12 @@ void print_help() {
         "  -r, --repl       Start the interactive REPL\n"
         "  -f, --file PATH  Read an expression from PATH\n"
         "  -d, --debug      Write the parsed AST to stderr\n"
+        "  -p, --precision DIGITS       Set decimal precision\n"
+        "  -b, --backend CATEGORY NAME  Select a backend:\n"
+        "      symbolic: auto, symengine, ginac\n"
+        "      linear: auto, eigen, armadillo\n"
+        "      integration: auto, gsl, boost\n"
+        "      optimization: auto, ceres, nlopt\n"
         "  --                End option parsing\n\n"
         "Operations:\n"
         "  evaluate simplify expand factor differentiate integrate limit\n"
@@ -38,11 +44,21 @@ void print_repl_help() {
     std::cout << texsolve::i18n::translate(
         "REPL commands:\n"
         "  :help, :h                 Show this help\n"
+        "  :help backend, :h backend List backend choices\n"
         "  :definitions              List saved definitions\n"
         "  :clear                    Clear saved definitions\n"
         "  :precision DIGITS         Set decimal precision\n"
         "  :backend CATEGORY NAME    Select a backend\n"
         "  :quit, :exit              Exit the REPL\n");
+}
+
+void print_backend_help() {
+    std::cout << texsolve::i18n::translate(
+        "Backend choices:\n"
+        "  symbolic: auto, symengine, ginac\n"
+        "  linear: auto, eigen, armadillo\n"
+        "  integration: auto, gsl, boost\n"
+        "  optimization: auto, ceres, nlopt\n");
 }
 
 int exit_code(texsolve_status status) {
@@ -146,26 +162,40 @@ int execute(texsolve_context *context, std::string_view input, int operation, bo
     return exit_code(status);
 }
 
-bool configure_repl(texsolve_context *context, texsolve_context_options &options,
-                    std::string_view line) {
-    if (line.starts_with(":precision ")) {
-        uint32_t precision = 0;
-        const auto value = line.substr(11);
-        const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), precision);
-        if (error != std::errc{} || end != value.data() + value.size() || precision == 0) return false;
-        const auto previous = options.precision_digits;
-        options.precision_digits = precision;
-        if (texsolve_context_configure(context, &options) == TEXSOLVE_STATUS_OK) return true;
-        options.precision_digits = previous;
+/**
+ * Parse and store one decimal precision value.
+ *
+ * Args:
+ *     options: Context options to update.
+ *     value: Decimal precision text in the supported range.
+ * Returns:
+ *     bool: True when value is valid and stored.
+ */
+bool set_precision(texsolve_context_options &options, std::string_view value) {
+    uint32_t precision = 0;
+    const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), precision);
+    if (error != std::errc{} || end != value.data() + value.size() ||
+        precision == 0 || precision > 10000) {
         return false;
     }
-    if (!line.starts_with(":backend ")) return false;
-    std::istringstream input(std::string(line.substr(9)));
-    std::string category;
-    std::string name;
-    std::string trailing;
-    if (!(input >> category >> name) || input >> trailing) return false;
-    auto parse = [&](std::string_view automatic, std::string_view first, std::string_view second) {
+    options.precision_digits = precision;
+    return true;
+}
+
+/**
+ * Parse and store one category-specific backend selection.
+ *
+ * Args:
+ *     options: Context options to update.
+ *     category: Backend category name.
+ *     name: Backend name within category.
+ * Returns:
+ *     bool: True when category and name form a valid selection.
+ */
+bool set_backend(texsolve_context_options &options, std::string_view category,
+                 std::string_view name) {
+    const auto parse = [&](std::string_view automatic, std::string_view first,
+                           std::string_view second) {
         if (name == automatic) return 0;
         if (name == first) return 1;
         if (name == second) return 2;
@@ -187,20 +217,37 @@ bool configure_repl(texsolve_context *context, texsolve_context_options &options
         target = &options.optimization_backend;
     }
     if (target == nullptr || selected < 0) return false;
-    const auto previous = *target;
     *target = selected;
-    if (texsolve_context_configure(context, &options) == TEXSOLVE_STATUS_OK) return true;
-    *target = previous;
+    return true;
+}
+
+bool configure_repl(texsolve_context *context, texsolve_context_options &options,
+                    std::string_view line) {
+    const auto previous = options;
+    bool valid = false;
+    if (line.starts_with(":precision ")) {
+        valid = set_precision(options, line.substr(11));
+    } else if (line.starts_with(":backend ")) {
+        std::istringstream input(std::string(line.substr(9)));
+        std::string category;
+        std::string name;
+        std::string trailing;
+        valid = (input >> category >> name) && !(input >> trailing) &&
+                set_backend(options, category, name);
+    }
+    if (valid && texsolve_context_configure(context, &options) == TEXSOLVE_STATUS_OK) return true;
+    options = previous;
     return false;
 }
 
-int repl(texsolve_context *context) {
-    texsolve_context_options options{};
-    options.struct_size = sizeof(options);
-    options.abi_version = TEXSOLVE_ABI_VERSION;
+int repl(texsolve_context *context, texsolve_context_options options) {
     std::string line;
     while (std::cout << "> " && std::getline(std::cin, line)) {
         if (line == ":quit" || line == ":exit") return 0;
+        if (line == ":help backend" || line == ":h backend") {
+            print_backend_help();
+            continue;
+        }
         if (line == ":help" || line == ":h") {
             print_repl_help();
             continue;
@@ -261,6 +308,10 @@ int main(int argc, char **argv) {
     if (texsolve_context_create(&context) != TEXSOLVE_STATUS_OK) return 70;
     bool debug = false;
     bool force_repl = false;
+    texsolve_context_options options{};
+    options.struct_size = sizeof(options);
+    options.abi_version = TEXSOLVE_ABI_VERSION;
+    bool configure_context = false;
     std::string file;
     std::vector<std::string> expressions;
     int operation = TEXSOLVE_OPERATION_AUTO;
@@ -282,6 +333,23 @@ int main(int argc, char **argv) {
             return 0;
         } else if (argument == "-d" || argument == "--debug") debug = true;
         else if (argument == "-r" || argument == "--repl") force_repl = true;
+        else if (argument == "-p" || argument == "--precision") {
+            if (++index >= argc || !set_precision(options, argv[index])) {
+                std::cerr << texsolve::i18n::translate("invalid precision value\n");
+                texsolve_context_destroy(context);
+                return 2;
+            }
+            configure_context = true;
+        } else if (argument == "-b" || argument == "--backend") {
+            if (index + 2 >= argc ||
+                !set_backend(options, argv[index + 1], argv[index + 2])) {
+                std::cerr << texsolve::i18n::translate("invalid backend selection\n");
+                texsolve_context_destroy(context);
+                return 2;
+            }
+            index += 2;
+            configure_context = true;
+        }
         else if (argument == "-f" || argument == "--file") {
             if (++index >= argc) {
                 std::cerr << texsolve::i18n::translate("missing path after ") << argument << '\n';
@@ -299,6 +367,11 @@ int main(int argc, char **argv) {
             return 2;
         } else expressions.emplace_back(argument);
     }
+    if (configure_context && texsolve_context_configure(context, &options) != TEXSOLVE_STATUS_OK) {
+        std::cerr << texsolve::i18n::translate("invalid CLI setting\n");
+        texsolve_context_destroy(context);
+        return 2;
+    }
     if (force_repl) {
         if (!file.empty() || !expressions.empty() || debug || operation != TEXSOLVE_OPERATION_AUTO) {
             std::cerr << texsolve::i18n::translate(
@@ -306,7 +379,7 @@ int main(int argc, char **argv) {
             texsolve_context_destroy(context);
             return 2;
         }
-        const int status = repl(context);
+        const int status = repl(context, options);
         texsolve_context_destroy(context);
         return status;
     }
@@ -330,7 +403,7 @@ int main(int argc, char **argv) {
         }
     } else {
         if (stdin_is_terminal()) {
-            const int status = repl(context);
+            const int status = repl(context, options);
             texsolve_context_destroy(context);
             return status;
         }

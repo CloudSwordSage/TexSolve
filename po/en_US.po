@@ -10,11 +10,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgid "Usage: texsolve [options] [operation] [expression]\n       texsolve [options] --file <path>\n       texsolve --repl\n\nOptions:\n  -h, --help       Show this help\n  -v, --version    Show version\n  -r, --repl       Start the interactive REPL\n  -f, --file PATH  Read an expression from PATH\n  -d, --debug      Write the parsed AST to stderr\n  --                End option parsing\n\nOperations:\n  evaluate simplify expand factor differentiate integrate limit\n  sum product solve linear optimize ode define\n"
-msgstr "Usage: texsolve [options] [operation] [expression]\n       texsolve [options] --file <path>\n       texsolve --repl\n\nOptions:\n  -h, --help       Show this help\n  -v, --version    Show version\n  -r, --repl       Start the interactive REPL\n  -f, --file PATH  Read an expression from PATH\n  -d, --debug      Write the parsed AST to stderr\n  --                End option parsing\n\nOperations:\n  evaluate simplify expand factor differentiate integrate limit\n  sum product solve linear optimize ode define\n"
+msgid "Usage: texsolve [options] [operation] [expression]\n       texsolve [options] --file <path>\n       texsolve --repl\n\nOptions:\n  -h, --help       Show this help\n  -v, --version    Show version\n  -r, --repl       Start the interactive REPL\n  -f, --file PATH  Read an expression from PATH\n  -d, --debug      Write the parsed AST to stderr\n  -p, --precision DIGITS       Set decimal precision\n  -b, --backend CATEGORY NAME  Select a backend:\n      symbolic: auto, symengine, ginac\n      linear: auto, eigen, armadillo\n      integration: auto, gsl, boost\n      optimization: auto, ceres, nlopt\n  --                End option parsing\n\nOperations:\n  evaluate simplify expand factor differentiate integrate limit\n  sum product solve linear optimize ode define\n"
+msgstr "Usage: texsolve [options] [operation] [expression]\n       texsolve [options] --file <path>\n       texsolve --repl\n\nOptions:\n  -h, --help       Show this help\n  -v, --version    Show version\n  -r, --repl       Start the interactive REPL\n  -f, --file PATH  Read an expression from PATH\n  -d, --debug      Write the parsed AST to stderr\n  -p, --precision DIGITS       Set decimal precision\n  -b, --backend CATEGORY NAME  Select a backend:\n      symbolic: auto, symengine, ginac\n      linear: auto, eigen, armadillo\n      integration: auto, gsl, boost\n      optimization: auto, ceres, nlopt\n  --                End option parsing\n\nOperations:\n  evaluate simplify expand factor differentiate integrate limit\n  sum product solve linear optimize ode define\n"
 
-msgid "REPL commands:\n  :help, :h                 Show this help\n  :definitions              List saved definitions\n  :clear                    Clear saved definitions\n  :precision DIGITS         Set decimal precision\n  :backend CATEGORY NAME    Select a backend\n  :quit, :exit              Exit the REPL\n"
-msgstr "REPL commands:\n  :help, :h                 Show this help\n  :definitions              List saved definitions\n  :clear                    Clear saved definitions\n  :precision DIGITS         Set decimal precision\n  :backend CATEGORY NAME    Select a backend\n  :quit, :exit              Exit the REPL\n"
+msgid "REPL commands:\n  :help, :h                 Show this help\n  :help backend, :h backend List backend choices\n  :definitions              List saved definitions\n  :clear                    Clear saved definitions\n  :precision DIGITS         Set decimal precision\n  :backend CATEGORY NAME    Select a backend\n  :quit, :exit              Exit the REPL\n"
+msgstr "REPL commands:\n  :help, :h                 Show this help\n  :help backend, :h backend List backend choices\n  :definitions              List saved definitions\n  :clear                    Clear saved definitions\n  :precision DIGITS         Set decimal precision\n  :backend CATEGORY NAME    Select a backend\n  :quit, :exit              Exit the REPL\n"
 
 msgid "list"
 msgstr "list"
@@ -522,3 +522,25 @@ msgstr "unsupported solver operation"
 
 msgid "unknown symbolic backend"
 msgstr "unknown symbolic backend"
+
+msgid ""
+"Backend choices:\n"
+"  symbolic: auto, symengine, ginac\n"
+"  linear: auto, eigen, armadillo\n"
+"  integration: auto, gsl, boost\n"
+"  optimization: auto, ceres, nlopt\n"
+msgstr ""
+"Backend choices:\n"
+"  symbolic: auto, symengine, ginac\n"
+"  linear: auto, eigen, armadillo\n"
+"  integration: auto, gsl, boost\n"
+"  optimization: auto, ceres, nlopt\n"
+
+msgid "invalid precision value\n"
+msgstr "invalid precision value\n"
+
+msgid "invalid backend selection\n"
+msgstr "invalid backend selection\n"
+
+msgid "invalid CLI setting\n"
+msgstr "invalid CLI setting\n"

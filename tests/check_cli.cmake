@@ -1,6 +1,6 @@
 file(WRITE "${WORK_DIR}/cli-input.tex" "1+1")
 file(WRITE "${WORK_DIR}/repl-input.txt"
-  ":help\nx:=2\nx+1\n:definitions\n:precision 30\n:backend symbolic ginac\n:quit\n")
+  ":help\n:h backend\nx:=2\nx+1\n:definitions\n:precision 30\n\\sqrt{2}\n:backend symbolic ginac\n\\int_{0}^{1} e^{x^2}\\,dx\n:backend linear armadillo\n:backend integration boost\n:backend optimization nlopt\n:quit\n")
 file(WRITE "${WORK_DIR}/repl-short-help.txt" ":h\n:quit\n")
 
 function(run_cli expected_status expected_stdout expected_stderr)
@@ -18,8 +18,20 @@ endfunction()
 run_cli(0 "2" "^$" "1+1")
 run_cli(0 "Usage: texsolve" "^$" --help)
 run_cli(0 "Usage: texsolve" "^$" -h)
+run_cli(0 "symbolic: auto, symengine, ginac" "^$" --help)
+run_cli(0 "linear: auto, eigen, armadillo" "^$" --help)
+run_cli(0 "integration: auto, gsl, boost" "^$" --help)
+run_cli(0 "optimization: auto, ceres, nlopt" "^$" --help)
 run_cli(0 "texsolve 0\\.1\\.0" "^$" --version)
 run_cli(0 "texsolve 0\\.1\\.0" "^$" -v)
+run_cli(0 "1\\.41421356237309504880168872421" "^$" --precision 30 "\\sqrt{2}")
+run_cli(0 "1\\.414213562373095048801689" "^$" -p 25 "\\sqrt{2}")
+run_cli(0 "2" "^$" --precision 10000 "1+1")
+run_cli(0 "2" "^$" --backend symbolic ginac "1+1")
+run_cli(0 "2" "^$" --backend linear armadillo "1+1")
+run_cli(0 "backend: boost_math" "^$" --backend integration boost "\\int_{0}^{1} e^{x^2}\\,dx")
+run_cli(0 "backend: boost_math" "^$" -b integration boost "\\int_{0}^{1} e^{x^2}\\,dx")
+run_cli(0 "2" "^$" --backend optimization nlopt "1+1")
 run_cli(0 "2" "^$" --file "${WORK_DIR}/cli-input.tex")
 run_cli(0 "2" "^$" -f "${WORK_DIR}/cli-input.tex")
 run_cli(0 "2" "Binary" --debug --file "${WORK_DIR}/cli-input.tex")
@@ -38,6 +50,11 @@ run_cli(2 "^$" ".+" --unknown)
 run_cli(2 "^$" ".+" -x)
 run_cli(2 "^$" ".+" --repl solve)
 run_cli(2 "^$" ".+" --debug --repl)
+run_cli(2 "^$" ".+" --precision 0 "1+1")
+run_cli(2 "^$" ".+" --precision 10001 "1+1")
+run_cli(2 "^$" ".+" --precision)
+run_cli(2 "^$" ".+" --backend symbolic missing "1+1")
+run_cli(2 "^$" ".+" --backend symbolic)
 
 execute_process(
   COMMAND "${CMAKE_COMMAND}" -E env "LANG=zh_CN.UTF-8" "LC_ALL=zh_CN.UTF-8" "${CLI}" --help
@@ -77,7 +94,12 @@ execute_process(
   OUTPUT_VARIABLE repl_stdout
   ERROR_VARIABLE repl_stderr)
 if(NOT repl_status EQUAL 0 OR NOT repl_stdout MATCHES "REPL commands:" OR
-   NOT repl_stdout MATCHES "3" OR NOT repl_stdout MATCHES "1 variables")
+   NOT repl_stdout MATCHES "Backend choices:" OR
+   NOT repl_stdout MATCHES "optimization: auto, ceres, nlopt" OR
+   NOT repl_stdout MATCHES "1\\.41421356237309504880168872421" OR
+   NOT repl_stdout MATCHES "backend: ginac" OR
+   NOT repl_stdout MATCHES "3" OR NOT repl_stdout MATCHES "1 variables" OR
+   NOT repl_stderr STREQUAL "")
   message(FATAL_ERROR "REPL check failed: status=${repl_status}, stdout=${repl_stdout}, stderr=${repl_stderr}")
 endif()
 
