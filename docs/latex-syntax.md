@@ -168,4 +168,4 @@ integer       = digit { digit } ;
 
 ## 10. AST 调试格式
 
-`-debug` 在 stderr 输出缩进树，每行固定为 `Kind [begin,end) payload`，子节点按源码顺序排列。字符串使用 JSON 风格转义，数值保留源码拼写。该格式用于调试和黄金测试，不属于 C ABI，也不承诺跨主版本兼容。
+`--debug`/`-d` 在 stderr 输出缩进树，每行固定为 `Kind [begin,end) payload`，子节点按源码顺序排列。字符串使用 JSON 风格转义，数值保留源码拼写。该格式用于调试和黄金测试，不属于 C ABI，也不承诺跨主版本兼容。
