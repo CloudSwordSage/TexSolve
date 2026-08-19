@@ -23,6 +23,7 @@ jobs:
           install: >-
             git make autoconf automake libtool pkgconf wget tar zip perl nasm
             mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-gcc-fortran
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-gettext
