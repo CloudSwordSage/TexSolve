@@ -7,37 +7,55 @@
 
 set -euo pipefail
 
-# 获取终端底行
-BOTTOM_LINE=$(( $(tput lines) - 1 ))
-TERM_COLS=$(tput cols)
+if [[ -t 1 ]] \
+    && [[ "${TERM:-dumb}" != "dumb" ]] \
+    && command -v tput >/dev/null 2>&1; then
 
+    BOTTOM_LINE=$(( $(tput lines) - 1 ))
+    TERM_COLS=$(tput cols)
 
-init_status_bar() {
-    # 设置滚动区域：0 到倒数第二行
-    tput csr 0 $(( BOTTOM_LINE - 1 ))
-    # 光标移到内容区最后一行
-    tput cup $(( BOTTOM_LINE - 1 )) 0
-}
+    init_status_bar() {
+        # 设置滚动区域：0 到倒数第二行
+        tput csr 0 $(( BOTTOM_LINE - 1 ))
 
-update_status() {
-    local msg="$1"
+        # 光标移到内容区最后一行
+        tput cup $(( BOTTOM_LINE - 1 )) 0
+    }
 
-    tput sc                     # 保存光标
-    tput cup "$BOTTOM_LINE" 0   # 移到状态栏
-    tput el                     # 清空
-    tput rev                    # 反色
-    printf "%-${TERM_COLS}s" "$msg"
-    tput sgr0                   # 取消反色
-    tput rc                     # 恢复光标
-}
+    update_status() {
+        local msg="$1"
 
-cleanup() {
-    tput csr 0 $(( $(tput lines) - 1 ))  # 恢复完整滚动区
-    tput cup "$BOTTOM_LINE" 0
-    echo ""
-}
+        tput sc
+        tput cup "$BOTTOM_LINE" 0
+        tput el
+        tput rev
+        printf "%-${TERM_COLS}s" "$msg"
+        tput sgr0
+        tput rc
+    }
 
-trap cleanup EXIT
+    cleanup() {
+        # 恢复完整滚动区
+        tput csr 0 $(( $(tput lines) - 1 ))
+        tput cup "$BOTTOM_LINE" 0
+        printf '\n'
+    }
+    trap cleanup EXIT
+else
+    init_status_bar() {
+        :
+    }
+
+    update_status() {
+        local msg="$1"
+        echo "$msg"
+    }
+
+    cleanup() {
+        :
+    }
+
+fi
 
 init_status_bar
 update_status "准备编译"

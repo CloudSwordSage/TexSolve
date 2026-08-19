@@ -8,20 +8,40 @@
 set -euo pipefail
 
 USE_INSECURE_TLS=${USE_INSECURE_TLS:-0}
-if [ "$USE_INSECURE_TLS" = "1" ]; then
+
+if [[ "$USE_INSECURE_TLS" == "1" ]]; then
     echo "正在使用不安全的 TLS 连接..."
 fi
 
-mkdir -p ./tmp/downloads
-mkdir -p ./tmp/sources
+# =========== 路径 ===========
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+
+DOWNLOAD_DIR="$PROJECT_ROOT/tmp/downloads"
+SOURCE_DIR="$PROJECT_ROOT/tmp/sources"
+
+echo "项目根目录: $PROJECT_ROOT"
+echo "下载目录: $DOWNLOAD_DIR"
+
+mkdir -p "$DOWNLOAD_DIR"
+mkdir -p "$SOURCE_DIR"
 
 # =========== 配置 ===========
 
 # 高精度计算
+
 GMP_VERSION="6.3.0"
 GMP_URL="https://ftpmirror.gnu.org/gmp/gmp-${GMP_VERSION}.tar.xz"
 GMP_OUT_NAME="gmp.tar.xz"
 GMP_SHA256="a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
+
+# GMP 单独使用多源回退
+GMP_FALLBACK_URLS=(
+    "https://ftpmirror.gnu.org/gmp/gmp-${GMP_VERSION}.tar.xz"
+    "https://ftp.gnu.org/gnu/gmp/gmp-${GMP_VERSION}.tar.xz"
+    "https://gmplib.org/download/gmp/gmp-${GMP_VERSION}.tar.xz"
+)
 
 MPFR_VERSION="4.2.0"
 MPFR_URL="https://www.mpfr.org/mpfr-${MPFR_VERSION}/mpfr-${MPFR_VERSION}.tar.xz"
@@ -29,6 +49,7 @@ MPFR_OUT_NAME="mpfr.tar.xz"
 MPFR_SHA256="06a378df13501248c1b2db5aa977a2c8126ae849a9d9b7be2546fb4a9c26d993"
 
 # 线性代数
+
 EIGEN_VERSION="3.4.0"
 EIGEN_URL="https://codeload.github.com/eigen-mirror/eigen/tar.gz/refs/tags/${EIGEN_VERSION}"
 EIGEN_OUT_NAME="eigen.tar.gz"
@@ -45,6 +66,7 @@ OPENBLAS_OUT_NAME="openblas.tar.gz"
 OPENBLAS_SHA256="4c25cb30c4bb23eddca05d7d0a85997b8db6144f5464ba7f8c09ce91e2f35543"
 
 # 符号计算
+
 SYMENGINE_VERSION="0.14.0"
 SYMENGINE_URL="https://github.com/symengine/symengine/archive/refs/tags/v${SYMENGINE_VERSION}.tar.gz"
 SYMENGINE_OUT_NAME="symengine.tar.gz"
@@ -61,6 +83,7 @@ CLN_OUT_NAME="cln.tar.bz2"
 CLN_SHA256="7c7ed8474958337e4df5bb57ea5176ad0365004cbb98b621765bc4606a10d86b"
 
 # 数值积分
+
 GSL_VERSION="2.7.1"
 GSL_URL="https://mirrors.aliyun.com/gnu/gsl/gsl-${GSL_VERSION}.tar.gz"
 GSL_OUT_NAME="gsl.tar.gz"
@@ -72,6 +95,7 @@ BOOST_OUT_NAME="boost.tar.gz"
 BOOST_SHA256="2575e74ffc3ef1cd0babac2c1ee8bdb5782a0ee672b1912da40e5b4b591ca01f"
 
 # 非线性优化
+
 CERES_VERSION="2.2.0"
 CERES_URL="https://github.com/ceres-solver/ceres-solver/archive/refs/tags/${CERES_VERSION}.tar.gz"
 CERES_OUT_NAME="ceres.tar.gz"
@@ -83,79 +107,131 @@ NLOPT_OUT_NAME="nlopt.tar.gz"
 NLOPT_SHA256="506f83a9e778ad4f204446e99509cb2bdf5539de8beccc260a014bd560237be1"
 
 # 微分方程
+
 SUNDIALS_VERSION="7.5.0"
 SUNDIALS_URL="https://github.com/LLNL/sundials/releases/download/v${SUNDIALS_VERSION}/sundials-${SUNDIALS_VERSION}.tar.gz"
 SUNDIALS_OUT_NAME="sundials.tar.gz"
 SUNDIALS_SHA256="089ac659507def738b7a65b574ffe3a900d38569e3323d9709ebed3e445adecc"
 
-# =========== 拉取 ===========
+# =========== 下载列表 ===========
 
 URL=(
-    $GMP_URL
-    $MPFR_URL
-    $EIGEN_URL
-    $ARMADILLO_URL
-    $OPENBLAS_URL
-    $SYMENGINE_URL
-    $GINAC_URL
-    $CLN_URL
-    $GSL_URL
-    $BOOST_URL
-    $CERES_URL
-    $NLOPT_URL
-    $SUNDIALS_URL
+    "$GMP_URL"
+    "$MPFR_URL"
+    "$EIGEN_URL"
+    "$ARMADILLO_URL"
+    "$OPENBLAS_URL"
+    "$SYMENGINE_URL"
+    "$GINAC_URL"
+    "$CLN_URL"
+    "$GSL_URL"
+    "$BOOST_URL"
+    "$CERES_URL"
+    "$NLOPT_URL"
+    "$SUNDIALS_URL"
 )
+
 SHA256=(
-    $GMP_SHA256
-    $MPFR_SHA256
-    $EIGEN_SHA256
-    $ARMADILLO_SHA256
-    $OPENBLAS_SHA256
-    $SYMENGINE_SHA256
-    $GINAC_SHA256
-    $CLN_SHA256
-    $GSL_SHA256
-    $BOOST_SHA256
-    $CERES_SHA256
-    $NLOPT_SHA256
-    $SUNDIALS_SHA256
+    "$GMP_SHA256"
+    "$MPFR_SHA256"
+    "$EIGEN_SHA256"
+    "$ARMADILLO_SHA256"
+    "$OPENBLAS_SHA256"
+    "$SYMENGINE_SHA256"
+    "$GINAC_SHA256"
+    "$CLN_SHA256"
+    "$GSL_SHA256"
+    "$BOOST_SHA256"
+    "$CERES_SHA256"
+    "$NLOPT_SHA256"
+    "$SUNDIALS_SHA256"
 )
 
 OUT_NAME=(
-    $GMP_OUT_NAME
-    $MPFR_OUT_NAME
-    $EIGEN_OUT_NAME
-    $ARMADILLO_OUT_NAME
-    $OPENBLAS_OUT_NAME
-    $SYMENGINE_OUT_NAME
-    $GINAC_OUT_NAME
-    $CLN_OUT_NAME
-    $GSL_OUT_NAME
-    $BOOST_OUT_NAME
-    $CERES_OUT_NAME
-    $NLOPT_OUT_NAME
-    $SUNDIALS_OUT_NAME
+    "$GMP_OUT_NAME"
+    "$MPFR_OUT_NAME"
+    "$EIGEN_OUT_NAME"
+    "$ARMADILLO_OUT_NAME"
+    "$OPENBLAS_OUT_NAME"
+    "$SYMENGINE_OUT_NAME"
+    "$GINAC_OUT_NAME"
+    "$CLN_OUT_NAME"
+    "$GSL_OUT_NAME"
+    "$BOOST_OUT_NAME"
+    "$CERES_OUT_NAME"
+    "$NLOPT_OUT_NAME"
+    "$SUNDIALS_OUT_NAME"
 )
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-PROJECT_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
-DOWNLOAD_DIR="$PROJECT_ROOT/tmp/downloads"
-echo "项目根目录: $PROJECT_ROOT"
-echo "下载目录: $DOWNLOAD_DIR"
-mkdir -p "$DOWNLOAD_DIR"
+# =========== 下载函数 ===========
+
+wget_file() {
+    local url="$1"
+    local output="$2"
+
+    if [[ "$USE_INSECURE_TLS" == "1" ]]; then
+        wget \
+            --no-check-certificate \
+            --timeout=20 \
+            --tries=3 \
+            --retry-connrefused \
+            "$url" \
+            -O "$output"
+    else
+        wget \
+            --timeout=20 \
+            --tries=3 \
+            --retry-connrefused \
+            "$url" \
+            -O "$output"
+    fi
+}
+
+download_gmp() {
+    local output="$1"
+    local source_url
+    local download_ok=0
+
+    for source_url in "${GMP_FALLBACK_URLS[@]}"; do
+        echo "正在尝试获取 GMP:"
+        echo "  -> $source_url"
+
+        # 避免失败源留下半截压缩包
+        rm -f "$output"
+
+        if wget_file "$source_url" "$output"; then
+            download_ok=1
+            echo "  -> GMP 下载成功。"
+            break
+        fi
+
+        echo "  -> 当前 GMP 下载源失败，尝试下一个..."
+    done
+
+    if [[ "$download_ok" -ne 1 ]]; then
+        echo "ERROR: 所有 GMP 下载源均失败"
+        rm -f "$output"
+        return 1
+    fi
+}
+
+# =========== 拉取 ===========
+
 cd "$DOWNLOAD_DIR"
 
 for ((i = 0; i < ${#URL[@]}; i++)); do
     echo "正在处理 ${OUT_NAME[i]}..."
 
+    # ---------- 已存在文件校验 ----------
+
     if [[ -f "${OUT_NAME[i]}" ]]; then
-        if [ -n "${SHA256[i]}" ]; then
-            echo "${SHA256[i]}  ${OUT_NAME[i]}" | sha256sum -c --quiet
-            if [ $? -eq 0 ]; then
+        if [[ -n "${SHA256[i]}" ]]; then
+            if echo "${SHA256[i]}  ${OUT_NAME[i]}" | sha256sum -c --quiet; then
                 echo "  -> 文件已存在且 SHA256 匹配，跳过下载。"
                 continue
             else
                 echo "  -> 文件已存在，但 SHA256 不匹配，正在重新下载..."
+                rm -f "${OUT_NAME[i]}"
             fi
         else
             echo "  -> 文件已存在，没有 SHA256 可供验证，跳过下载。"
@@ -163,42 +239,60 @@ for ((i = 0; i < ${#URL[@]}; i++)); do
         fi
     fi
 
-    echo "正在获取 ${URL[i]}..."
-    if [ "$USE_INSECURE_TLS" = "1" ]; then
-        wget --no-check-certificate "${URL[i]}" -O "${OUT_NAME[i]}"
+    # ---------- 下载 ----------
+
+    if [[ "${OUT_NAME[i]}" == "$GMP_OUT_NAME" ]]; then
+        download_gmp "${OUT_NAME[i]}"
     else
-        wget "${URL[i]}" -O "${OUT_NAME[i]}"
+        echo "正在获取 ${URL[i]}..."
+        wget_file "${URL[i]}" "${OUT_NAME[i]}"
     fi
 
-    if [ -n "${SHA256[i]}" ]; then
+    # ---------- SHA256 校验 ----------
+
+    if [[ -n "${SHA256[i]}" ]]; then
         echo "正在检查 ${OUT_NAME[i]}..."
-        echo "${SHA256[i]}  ${OUT_NAME[i]}" | sha256sum -c --quiet || {
+
+        if ! echo "${SHA256[i]}  ${OUT_NAME[i]}" | sha256sum -c --quiet; then
             echo "ERROR: ${OUT_NAME[i]} 的 SHA256 不匹配"
+            rm -f "${OUT_NAME[i]}"
             exit 1
-        }
+        fi
+
+        echo "  -> SHA256 校验通过。"
     fi
 done
 
-
 # ========== 静默解压 ==========
+
 for f in "${OUT_NAME[@]}"; do
     echo "解压缩 $f..."
-    BASENAME="${f%.*}"
-    # 处理二级扩展
+
     if [[ "$f" == *.tar.gz ]]; then
         BASENAME="${f%.tar.gz}"
-        mkdir -p ../sources/"$BASENAME"
-        tar -xzf "$f" -C ../sources/"$BASENAME" --strip-components=1
+        mkdir -p "$SOURCE_DIR/$BASENAME"
+        tar -xzf "$f" \
+            -C "$SOURCE_DIR/$BASENAME" \
+            --strip-components=1
+
     elif [[ "$f" == *.tar.xz ]]; then
         BASENAME="${f%.tar.xz}"
-        mkdir -p ../sources/"$BASENAME"
-        tar -xJf "$f" -C ../sources/"$BASENAME" --strip-components=1
+        mkdir -p "$SOURCE_DIR/$BASENAME"
+        tar -xJf "$f" \
+            -C "$SOURCE_DIR/$BASENAME" \
+            --strip-components=1
+
     elif [[ "$f" == *.tar.bz2 ]]; then
         BASENAME="${f%.tar.bz2}"
-        mkdir -p ../sources/"$BASENAME"
-        tar -xjf "$f" -C ../sources/"$BASENAME" --strip-components=1
+        mkdir -p "$SOURCE_DIR/$BASENAME"
+        tar -xjf "$f" \
+            -C "$SOURCE_DIR/$BASENAME" \
+            --strip-components=1
+
     else
-        echo "未知的存档格式：$f，正在跳过"
+        echo "未知的存档格式: $f，正在跳过"
         continue
     fi
 done
+
+echo "所有依赖源码已下载、校验并解压完成。"

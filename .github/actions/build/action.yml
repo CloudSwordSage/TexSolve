@@ -1,30 +1,65 @@
 name: Build TexSolve
+
 description: Build cached UCRT64 dependencies and package TexSolve.
 
 runs:
   using: composite
+
   steps:
     - uses: actions/cache@v4
       id: dependencies
       with:
         path: third_party
         key: ${{ runner.os }}-ucrt64-third-party-${{ hashFiles('scripts/**', 'third_party.info.md') }}
+
     - name: Fetch and build third-party libraries
       if: steps.dependencies.outputs.cache-hit != 'true'
       shell: msys2 {0}
       run: |
         set -euo pipefail
-        ./scripts/fetch_all.sh </dev/null
+
+        ./scripts/fetch_all.sh
         bash ./scripts/windows_build.sh "$(nproc)"
+
     - name: Configure, test, and install
       shell: msys2 {0}
       run: |
         set -euo pipefail
-        cmake -G Ninja -S . -B build_gcc -DCMAKE_BUILD_TYPE=Release
-        cmake --build build_gcc --parallel "$(nproc)"
-        ctest --test-dir build_gcc --output-on-failure
-        cmake --install build_gcc --prefix package
-        ldd package/bin/texsolve.exe package/bin/texsolve.dll |
-          awk '/=> \/ucrt64\/bin\// { print $3 }' |
+
+        cmake \
+          -G Ninja \
+          -S . \
+          -B build_gcc \
+          -DCMAKE_BUILD_TYPE=Release
+
+        cmake \
+          --build build_gcc \
+          --parallel "$(nproc)"
+
+        ctest \
+          --test-dir build_gcc \
+          --output-on-failure
+
+        cmake \
+          --install build_gcc \
+          --prefix package
+
+        echo "Collecting UCRT64 runtime DLL dependencies..."
+
+        ntldd \
+          package/bin/texsolve.exe \
+          package/bin/texsolve.dll |
+          awk '$2 == "=>" && $3 ~ "^/ucrt64/bin/.*\\.dll$" { print $3 }' |
           sort -u |
-          xargs -r -I{} cp '{}' package/bin/
+          while IFS= read -r dll; do
+            echo "  -> $(basename "$dll")"
+            cp -f "$dll" package/bin/
+          done
+
+        echo "Packaged binaries:"
+        find package/bin \
+          -maxdepth 1 \
+          -type f \
+          \( -iname '*.exe' -o -iname '*.dll' \) \
+          -printf '  -> %f\n' |
+          sort

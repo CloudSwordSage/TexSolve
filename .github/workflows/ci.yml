@@ -27,6 +27,7 @@ jobs:
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-gettext
             mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-ntldd
       - uses: ./.github/actions/build
       - name: Archive package
         run: zip -r texsolve-${{ github.sha }}-windows-x64.zip package
