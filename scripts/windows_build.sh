@@ -67,110 +67,110 @@ echo "并行编译线程数: $JOBS"
 export CC CXX BUILD_TRIPLE HOST_TRIPLE TARGET_SYS CMAKE FC
 
 # 构建 GMP 库
-# update_status "[1/13] 正在构建 GMP 库...   --- 包含必要的 check, 整体耗时较高"
-# "$SCRIPT_DIR/build_librarys/gmp.sh" \
-#   "$PROJECT_ROOT" \
-#   "$BUILD_TRIPLE" \
-#   "$HOST_TRIPLE" \
-#   "$CMAKE" \
-#   "$CC" \
-#   "$CXX" \
-#   "$FC" \
-#   "64" \
-#   "-O2 -pipe -march=native -std=gnu17" \
-#   "-O2 -pipe -march=native -std=gnu++17" \
-#   "$JOBS"
+update_status "[1/13] 正在构建 GMP 库...   --- 包含必要的 check, 整体耗时较高"
+"$SCRIPT_DIR/build_librarys/gmp.sh" \
+  "$PROJECT_ROOT" \
+  "$BUILD_TRIPLE" \
+  "$HOST_TRIPLE" \
+  "$CMAKE" \
+  "$CC" \
+  "$CXX" \
+  "$FC" \
+  "64" \
+  "-O2 -pipe -march=native -std=gnu17" \
+  "-O2 -pipe -march=native -std=gnu++17" \
+  "$JOBS"
 
-# # 构建 MPFR 库  --  依赖 gmp 库
-# update_status "[2/13] 正在构建 MPFR 库..."
-# "$SCRIPT_DIR/build_librarys/mpfr.sh" \
-#   "$PROJECT_ROOT" \
-#   "$BUILD_TRIPLE" \
-#   "$HOST_TRIPLE" \
-#   "$CMAKE" \
-#   "$CC" \
-#   "$CXX" \
-#   "$FC" \
-#   "64" \
-#   "-O2 -pipe -march=native -std=gnu17" \
-#   "-O2 -pipe -march=native -std=gnu++17" \
-#   "$JOBS"
+# 构建 MPFR 库  --  依赖 gmp 库
+update_status "[2/13] 正在构建 MPFR 库..."
+"$SCRIPT_DIR/build_librarys/mpfr.sh" \
+  "$PROJECT_ROOT" \
+  "$BUILD_TRIPLE" \
+  "$HOST_TRIPLE" \
+  "$CMAKE" \
+  "$CC" \
+  "$CXX" \
+  "$FC" \
+  "64" \
+  "-O2 -pipe -march=native -std=gnu17" \
+  "-O2 -pipe -march=native -std=gnu++17" \
+  "$JOBS"
 
-# # 构建 eigen 库
-# update_status "[3/13] 正在构建 eigen 库..."
-# "$SCRIPT_DIR/build_librarys/eigen.sh" \
-#   "$PROJECT_ROOT" \
-#   "$BUILD_TRIPLE" \
-#   "$HOST_TRIPLE" \
-#   "$CMAKE" \
-#   "$CC" \
-#   "$CXX" \
-#   "$FC" \
-#   "64" \
-#   "-O2 -pipe -march=native -std=gnu17" \
-#   "-O2 -pipe -march=native -std=gnu++17" \
-#   "$JOBS"
+# 构建 eigen 库
+update_status "[3/13] 正在构建 eigen 库..."
+"$SCRIPT_DIR/build_librarys/eigen.sh" \
+  "$PROJECT_ROOT" \
+  "$BUILD_TRIPLE" \
+  "$HOST_TRIPLE" \
+  "$CMAKE" \
+  "$CC" \
+  "$CXX" \
+  "$FC" \
+  "64" \
+  "-O2 -pipe -march=native -std=gnu17" \
+  "-O2 -pipe -march=native -std=gnu++17" \
+  "$JOBS"
 
-# # 构建 openblas 库
-# update_status "[4/13] 正在构建 openblas 库...   --- 小文件巨多, 编译耗时较长"
-# "$SCRIPT_DIR/build_librarys/openblas.sh" \
-#   "$PROJECT_ROOT" \
-#   "$BUILD_TRIPLE" \
-#   "$HOST_TRIPLE" \
-#   "$CMAKE" \
-#   "$CC" \
-#   "$CXX" \
-#   "$FC" \
-#   "64" \
-#   "-O2 -pipe -march=native -std=gnu17" \
-#   "-O2 -pipe -march=native -std=gnu++17" \
-#   "-O2 -pipe -march=native" \
-#   "$JOBS"
+# 构建 openblas 库
+update_status "[4/13] 正在构建 openblas 库...   --- 小文件巨多, 编译耗时较长"
+"$SCRIPT_DIR/build_librarys/openblas.sh" \
+  "$PROJECT_ROOT" \
+  "$BUILD_TRIPLE" \
+  "$HOST_TRIPLE" \
+  "$CMAKE" \
+  "$CC" \
+  "$CXX" \
+  "$FC" \
+  "64" \
+  "-O2 -pipe -march=native -std=gnu17" \
+  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -march=native" \
+  "$JOBS"
 
 # 构建 cln 库  --  依赖 gmp 库
-# update_status "[5/13] 正在构建 cln 库..."
-# "$SCRIPT_DIR/build_librarys/cln.sh" \
-#   "$PROJECT_ROOT" \
-#   "$BUILD_TRIPLE" \
-#   "$HOST_TRIPLE" \
-#   "$CMAKE" \
-#   "$CC" \
-#   "$CXX" \
-#   "$FC" \
-#   "64" \
-#   "-O2 -pipe -march=native -std=gnu17" \
-#   "-O2 -pipe -march=native -std=gnu++17" \
-#   "$JOBS"
+update_status "[5/13] 正在构建 cln 库..."
+"$SCRIPT_DIR/build_librarys/cln.sh" \
+  "$PROJECT_ROOT" \
+  "$BUILD_TRIPLE" \
+  "$HOST_TRIPLE" \
+  "$CMAKE" \
+  "$CC" \
+  "$CXX" \
+  "$FC" \
+  "64" \
+  "-O2 -pipe -march=native -std=gnu17" \
+  "-O2 -pipe -march=native -std=gnu++17" \
+  "$JOBS"
 
-# # 构建 symengine 库  --  依赖 gmp 库和 mpfr 库
-# update_status "[6/13] 正在构建 symengine 库..."
-# "$SCRIPT_DIR/build_librarys/symengine.sh" \
-#   "$PROJECT_ROOT" \
-#   "$BUILD_TRIPLE" \
-#   "$HOST_TRIPLE" \
-#   "$CMAKE" \
-#   "$CC" \
-#   "$CXX" \
-#   "$FC" \
-#   "64" \
-#   "-O2 -pipe -march=native -std=gnu17" \
-#   "-O2 -pipe -march=native -std=gnu++17" \
-#   "$JOBS"
+# 构建 symengine 库  --  依赖 gmp 库和 mpfr 库
+update_status "[6/13] 正在构建 symengine 库..."
+"$SCRIPT_DIR/build_librarys/symengine.sh" \
+  "$PROJECT_ROOT" \
+  "$BUILD_TRIPLE" \
+  "$HOST_TRIPLE" \
+  "$CMAKE" \
+  "$CC" \
+  "$CXX" \
+  "$FC" \
+  "64" \
+  "-O2 -pipe -march=native -std=gnu17" \
+  "-O2 -pipe -march=native -std=gnu++17" \
+  "$JOBS"
 
-# # 构建 ceres-solver 库  --  依赖 eigen 库 和 openblas 库
-# update_status "[7/13] 正在构建 ceres-solver 库..."
-# "$SCRIPT_DIR/build_librarys/ceres-solver.sh" \
-#   "$PROJECT_ROOT" \
-#   "$BUILD_TRIPLE" \
-#   "$HOST_TRIPLE" \
-#   "$CMAKE" \
-#   "$CC" \
-#   "$CXX" \
-#   "$FC" \
-#   "64" \
-#   "-O2 -pipe -march=native -std=gnu17" \
-#   "-O2 -pipe -march=native -include cstdint -std=gnu++17" \
-#   "$JOBS"
+# 构建 ceres-solver 库  --  依赖 eigen 库 和 openblas 库
+update_status "[7/13] 正在构建 ceres-solver 库..."
+"$SCRIPT_DIR/build_librarys/ceres-solver.sh" \
+  "$PROJECT_ROOT" \
+  "$BUILD_TRIPLE" \
+  "$HOST_TRIPLE" \
+  "$CMAKE" \
+  "$CC" \
+  "$CXX" \
+  "$FC" \
+  "64" \
+  "-O2 -pipe -march=native -std=gnu17" \
+  "-O2 -pipe -march=native -include cstdint -std=gnu++17" \
+  "$JOBS"
 
 # 构建 armadillo 库  --  依赖 openblas 库
 update_status "[8/13] 正在构建 armadillo 库..."

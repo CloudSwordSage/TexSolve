@@ -15,18 +15,7 @@ runs:
       run: |
         set -euo pipefail
         ./scripts/fetch_all.sh </dev/null
-        project_root="$PWD"
-        build=x86_64-w64-mingw32
-        host=x86_64-w64-mingw32
-        cmake_path="$(command -v cmake)"
-        cc="$(command -v gcc)"
-        cxx="$(command -v g++)"
-        fc="$(command -v gfortran)"
-        cflags='-O2 -pipe -std=gnu17'
-        cxxflags='-O2 -pipe -std=gnu++20'
-        for library in gmp mpfr eigen openblas cln symengine ceres-solver armadillo ginac sundials gsl nlopt boost; do
-          "./scripts/build_librarys/${library}.sh" "$project_root" "$build" "$host" "$cmake_path" "$cc" "$cxx" "$fc" 64 "$cflags" "$cxxflags" "$(nproc)"
-        done
+        bash ./scripts/windows_build.sh "$(nproc)"
     - name: Configure, test, and install
       shell: msys2 {0}
       run: |
