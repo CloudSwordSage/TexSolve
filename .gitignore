@@ -10,3 +10,5 @@ build_gcc/
 build_consumer/
 
 codegraph.json
+
+!.github/actions/build/

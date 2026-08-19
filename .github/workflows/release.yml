@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags: ['*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git make autoconf automake libtool pkgconf wget tar zip perl nasm
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-gettext
+            mingw-w64-ucrt-x86_64-pkgconf
+      - uses: ./.github/actions/build
+      - name: Archive package
+        run: zip -r texsolve-${{ github.ref_name }}-windows-x64.zip package
+      - name: Generate release notes
+        run: |
+          set -euo pipefail
+          previous_tag="$(git tag --merged HEAD --sort=-version:refname | grep -Fxv "$GITHUB_REF_NAME" | head -n 1 || true)"
+          {
+            echo '## Changes'
+            if [ -n "$previous_tag" ]; then
+              git log --reverse --pretty=format:'- %s (%h)' "${previous_tag}..HEAD"
+            else
+              git log --reverse --pretty=format:'- %s (%h)' HEAD
+            fi
+          } > RELEASE_NOTES.md
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" texsolve-${{ github.ref_name }}-windows-x64.zip --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md

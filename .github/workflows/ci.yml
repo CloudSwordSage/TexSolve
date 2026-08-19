@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-main
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git make autoconf automake libtool pkgconf wget tar zip perl nasm
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-gettext
+            mingw-w64-ucrt-x86_64-pkgconf
+      - uses: ./.github/actions/build
+      - name: Archive package
+        run: zip -r texsolve-${{ github.sha }}-windows-x64.zip package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: texsolve-windows-x64
+          path: texsolve-${{ github.sha }}-windows-x64.zip
+          if-no-files-found: error
