@@ -202,11 +202,3 @@ for f in "${OUT_NAME[@]}"; do
         continue
     fi
 done
-
-read -p "所有文件已解压。您想删除已下载的压缩文件吗？ [y/N]: " answer
-if [[ "$answer" =~ ^[Yy]$ ]]; then
-    rm -f "${OUT_NAME[@]}"
-    echo "已下载的压缩文件已删除。"
-else
-    echo "已下载的压缩文件已保留。"
-fi
