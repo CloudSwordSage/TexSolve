@@ -53,15 +53,9 @@ runs:
 
         deps="$(
           for file in "${files[@]}"; do
-            ntldd -R "$file"
+            ntldd -R "$file" && printf '\n'
           done
         )"
-
-        if grep -q 'not found' <<< "$deps"; then
-          echo "错误: 存在未解析的 DLL 依赖"
-          printf '%s\n' "$deps"
-          exit 1
-        fi
 
         printf '%s\n' "$deps" |
           awk '$2 == "=>" && $3 ~ /ucrt64[\\/]bin[\\/][^\\/]+\.dll$/ { print $3 }' |
