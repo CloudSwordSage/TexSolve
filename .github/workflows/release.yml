@@ -46,6 +46,8 @@ jobs:
             fi
           } > RELEASE_NOTES.md
       - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" texsolve-${{ github.ref_name }}-windows-x64.zip --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+        uses: softprops/action-gh-release@v3
+        with:
+          body_path: RELEASE_NOTES.md
+          files: texsolve-${{ github.ref_name }}-windows-x64.zip
+          fail_on_unmatched_files: true
