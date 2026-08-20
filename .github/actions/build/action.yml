@@ -49,7 +49,7 @@ runs:
         ntldd \
           package/bin/texsolve.exe \
           package/bin/texsolve.dll |
-          awk '$2 == "=>" && $3 ~ "^/ucrt64/bin/.*\\.dll$" { print $3 }' |
+          awk '$2 == "=>" && $3 ~ /ucrt64[\\/]bin[\\/][^\\/]+\.dll$/ { print $3 }' |
           sort -u |
           while IFS= read -r dll; do
             echo "  -> $(basename "$dll")"

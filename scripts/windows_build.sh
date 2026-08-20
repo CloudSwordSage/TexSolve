@@ -95,8 +95,8 @@ update_status "[1/13] 正在构建 GMP 库...   --- 包含必要的 check, 整�
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
   "$JOBS"
 
 # 构建 MPFR 库  --  依赖 gmp 库
@@ -110,8 +110,8 @@ update_status "[2/13] 正在构建 MPFR 库..."
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
   "$JOBS"
 
 # 构建 eigen 库
@@ -125,8 +125,8 @@ update_status "[3/13] 正在构建 eigen 库..."
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
   "$JOBS"
 
 # 构建 openblas 库
@@ -140,9 +140,9 @@ update_status "[4/13] 正在构建 openblas 库...   --- 小文件巨多, 编译
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
-  "-O2 -pipe -march=native" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
+  "-O2 -pipe" \
   "$JOBS"
 
 # 构建 cln 库  --  依赖 gmp 库
@@ -156,8 +156,8 @@ update_status "[5/13] 正在构建 cln 库..."
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
   "$JOBS"
 
 # 构建 symengine 库  --  依赖 gmp 库和 mpfr 库
@@ -171,8 +171,8 @@ update_status "[6/13] 正在构建 symengine 库..."
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
   "$JOBS"
 
 # 构建 ceres-solver 库  --  依赖 eigen 库 和 openblas 库
@@ -186,8 +186,8 @@ update_status "[7/13] 正在构建 ceres-solver 库..."
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -include cstdint -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -include cstdint -std=gnu++17" \
   "$JOBS"
 
 # 构建 armadillo 库  --  依赖 openblas 库
@@ -201,8 +201,8 @@ update_status "[8/13] 正在构建 armadillo 库..."
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
   "$JOBS"
 
 
@@ -217,8 +217,8 @@ update_status "[9/13] 正在构建 ginac 库..."
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
   "$JOBS"
 
 # 构建 sundials 库   --  依赖 openblas 库
@@ -232,8 +232,8 @@ update_status "[10/13] 正在构建 sundials 库..."
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
   "$JOBS"
 
 # 构建 gsl 库
@@ -247,8 +247,8 @@ update_status "[11/13] 正在构建 gsl 库..."
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
   "$JOBS"
 
 # 构建 nlopt 库
@@ -262,8 +262,8 @@ update_status "[12/13] 正在构建 nlopt 库..."
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
   "$JOBS"
 
 # 构建 boost 库
@@ -277,8 +277,8 @@ update_status "[13/13] 正在构建 boost 库...   --- 存在 b2 配置, 总体�
   "$CXX" \
   "$FC" \
   "64" \
-  "-O2 -pipe -march=native -std=gnu17" \
-  "-O2 -pipe -march=native -std=gnu++17" \
+  "-O2 -pipe -std=gnu17" \
+  "-O2 -pipe -std=gnu++17" \
   "$JOBS"
 
 update_status "[13/13] 全部库构建完成"

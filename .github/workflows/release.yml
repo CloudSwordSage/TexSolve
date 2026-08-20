@@ -32,7 +32,11 @@ jobs:
             mingw-w64-ucrt-x86_64-ntldd
       - uses: ./.github/actions/build
       - name: Archive package
-        run: zip -r texsolve-${{ github.ref_name }}-windows-x64.zip package
+        run: zip -r texsolve-windows-x64.zip package
+
+      - name: Generate SHA256
+        run: sha256sum texsolve-windows-x64.zip > texsolve-windows-x64.zip.sha256
+
       - name: Generate release notes
         run: |
           set -euo pipefail
@@ -49,5 +53,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           body_path: RELEASE_NOTES.md
-          files: texsolve-${{ github.ref_name }}-windows-x64.zip
+          files: |
+            texsolve-windows-x64.zip
+            texsolve-windows-x64.zip.sha256
           fail_on_unmatched_files: true
