@@ -46,9 +46,24 @@ runs:
 
         echo "Collecting UCRT64 runtime DLL dependencies..."
 
-        ntldd \
-          package/bin/texsolve.exe \
-          package/bin/texsolve.dll |
+        files=(
+          package/bin/texsolve.exe
+          package/bin/texsolve.dll
+        )
+
+        deps="$(
+          for file in "${files[@]}"; do
+            ntldd -R "$file"
+          done
+        )"
+
+        if grep -q 'not found' <<< "$deps"; then
+          echo "错误: 存在未解析的 DLL 依赖"
+          printf '%s\n' "$deps"
+          exit 1
+        fi
+
+        printf '%s\n' "$deps" |
           awk '$2 == "=>" && $3 ~ /ucrt64[\\/]bin[\\/][^\\/]+\.dll$/ { print $3 }' |
           sort -u |
           while IFS= read -r dll; do
