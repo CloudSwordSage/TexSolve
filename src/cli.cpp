@@ -33,6 +33,7 @@ void print_help() {
         "  -f, --file PATH  Read an expression from PATH\n"
         "  -d, --debug      Write the parsed AST to stderr\n"
         "  -p, --precision DIGITS       Set decimal precision\n"
+        "  -m, --max-iterations COUNT   Set the maximum iteration count\n"
         "  -b, --backend CATEGORY NAME  Select a backend:\n"
         "      symbolic: auto, symengine, ginac\n"
         "      linear: auto, eigen, armadillo\n"
@@ -52,6 +53,7 @@ void print_repl_help() {
         "  :definitions              List saved definitions\n"
         "  :clear                    Clear saved definitions\n"
         "  :precision DIGITS         Set decimal precision\n"
+        "  :max-iterations COUNT     Set the maximum iteration count\n"
         "  :backend CATEGORY NAME    Select a backend\n"
         "  :quit, :exit              Exit the REPL\n");
 }
@@ -187,6 +189,26 @@ bool set_precision(texsolve_context_options &options, std::string_view value) {
 }
 
 /**
+ * Parse and store one maximum iteration count.
+ *
+ * Args:
+ *     options: Context options to update.
+ *     value: Iteration count text in the supported range.
+ * Returns:
+ *     bool: True when value is valid and stored.
+ */
+bool set_max_iterations(texsolve_context_options &options, std::string_view value) {
+    uint32_t iterations = 0;
+    const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), iterations);
+    if (error != std::errc{} || end != value.data() + value.size() ||
+        iterations == 0 || iterations > 10000000) {
+        return false;
+    }
+    options.max_iterations = iterations;
+    return true;
+}
+
+/**
  * Parse and store one category-specific backend selection.
  *
  * Args:
@@ -231,6 +253,8 @@ bool configure_repl(texsolve_context *context, texsolve_context_options &options
     bool valid = false;
     if (line.starts_with(":precision ")) {
         valid = set_precision(options, line.substr(11));
+    } else if (line.starts_with(":max-iterations ")) {
+        valid = set_max_iterations(options, line.substr(16));
     } else if (line.starts_with(":backend ")) {
         std::istringstream input(std::string(line.substr(9)));
         std::string category;
@@ -415,7 +439,8 @@ int repl(texsolve_context *context, texsolve_context_options options) {
             texsolve_result_destroy(snapshot);
             continue;
         }
-        if (line.starts_with(":precision ") || line.starts_with(":backend ")) {
+        if (line.starts_with(":precision ") || line.starts_with(":max-iterations ") ||
+            line.starts_with(":backend ")) {
             if (!configure_repl(context, options, line)) {
                 std::cerr << texsolve::i18n::translate("invalid REPL setting\n");
             }
@@ -481,6 +506,13 @@ int main(int argc, char **argv) {
         else if (argument == "-p" || argument == "--precision") {
             if (++index >= argc || !set_precision(options, argv[index])) {
                 std::cerr << texsolve::i18n::translate("invalid precision value\n");
+                texsolve_context_destroy(context);
+                return 2;
+            }
+            configure_context = true;
+        } else if (argument == "-m" || argument == "--max-iterations") {
+            if (++index >= argc || !set_max_iterations(options, argv[index])) {
+                std::cerr << texsolve::i18n::translate("invalid maximum iteration count\n");
                 texsolve_context_destroy(context);
                 return 2;
             }

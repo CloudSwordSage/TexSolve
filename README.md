@@ -136,6 +136,7 @@ texsolve --repl
 texsolve simplify '\frac{1}{3}+\frac{1}{6}'
 texsolve solve 'x^4-1=0'
 texsolve -p 50 integrate '\int_{0}^{1} \frac{1}{1+x^2}\,dx'
+texsolve -m 20000 '10001!'
 texsolve -b symbolic symengine factor 'x^2-1'
 texsolve --repl
 ```
@@ -148,6 +149,7 @@ texsolve --repl
 - `-f`, `--file`
 - `-d`, `--debug`
 - `-p`, `--precision`
+- `-m`, `--max-iterations`
 - `-b`, `--backend`
 
 ## 库集成

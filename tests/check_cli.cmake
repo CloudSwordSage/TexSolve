@@ -1,6 +1,6 @@
 file(WRITE "${WORK_DIR}/cli-input.tex" "1+1")
 file(WRITE "${WORK_DIR}/repl-input.txt"
-  ":help\n:h backend\nx:=2\nx+1\n:definitions\n:precision 30\n\\sqrt{2}\n:backend symbolic ginac\n\\int_{0}^{1} e^{x^2}\\,dx\n:backend linear armadillo\n:backend integration boost\n:backend optimization nlopt\n:quit\n")
+  ":help\n:h backend\nx:=2\nx+1\n:definitions\n:precision 30\n\\sqrt{2}\n:max-iterations 2\n3!\n:backend symbolic ginac\n\\int_{0}^{1} e^{x^2}\\,dx\n:backend linear armadillo\n:backend integration boost\n:backend optimization nlopt\n:quit\n")
 file(WRITE "${WORK_DIR}/repl-short-help.txt" ":h\n:quit\n")
 
 function(run_cli expected_status expected_stdout expected_stderr)
@@ -22,11 +22,16 @@ run_cli(0 "symbolic: auto, symengine, ginac" "^$" --help)
 run_cli(0 "linear: auto, eigen, armadillo" "^$" --help)
 run_cli(0 "integration: auto, gsl, boost" "^$" --help)
 run_cli(0 "optimization: auto, ceres, nlopt" "^$" --help)
+run_cli(0 "-m, --max-iterations COUNT" "^$" --help)
 run_cli(0 "texsolve 0\\.1\\.0" "^$" --version)
 run_cli(0 "texsolve 0\\.1\\.0" "^$" -v)
 run_cli(0 "1\\.41421356237309504880168872421" "^$" --precision 30 "\\sqrt{2}")
 run_cli(0 "1\\.414213562373095048801689" "^$" -p 25 "\\sqrt{2}")
 run_cli(0 "2" "^$" --precision 10000 "1+1")
+run_cli(0 "6" "^$" --max-iterations 3 "3!")
+run_cli(0 "6" "^$" -m 3 "3!")
+run_cli(6 "^$" "factorial iteration limit exceeded" --max-iterations 2 "3!")
+run_cli(0 "2" "^$" --max-iterations 10000000 "1+1")
 run_cli(0 "2" "^$" --backend symbolic ginac "1+1")
 run_cli(0 "2" "^$" --backend linear armadillo "1+1")
 run_cli(0 "backend: boost_math" "^$" --backend integration boost "\\int_{0}^{1} e^{x^2}\\,dx")
@@ -53,6 +58,9 @@ run_cli(2 "^$" ".+" --debug --repl)
 run_cli(2 "^$" ".+" --precision 0 "1+1")
 run_cli(2 "^$" ".+" --precision 10001 "1+1")
 run_cli(2 "^$" ".+" --precision)
+run_cli(2 "^$" ".+" --max-iterations 0 "1+1")
+run_cli(2 "^$" ".+" --max-iterations 10000001 "1+1")
+run_cli(2 "^$" ".+" --max-iterations)
 run_cli(2 "^$" ".+" --backend symbolic missing "1+1")
 run_cli(2 "^$" ".+" --backend symbolic)
 
@@ -61,7 +69,8 @@ execute_process(
   RESULT_VARIABLE zh_help_status
   OUTPUT_VARIABLE zh_help_stdout
   ERROR_VARIABLE zh_help_stderr)
-if(NOT zh_help_status EQUAL 0 OR NOT zh_help_stdout MATCHES "用法：texsolve" OR NOT zh_help_stderr STREQUAL "")
+if(NOT zh_help_status EQUAL 0 OR NOT zh_help_stdout MATCHES "用法：texsolve" OR
+   NOT zh_help_stdout MATCHES "设置最大迭代次数" OR NOT zh_help_stderr STREQUAL "")
   message(FATAL_ERROR "Chinese help check failed: status=${zh_help_status}, stdout=${zh_help_stdout}, stderr=${zh_help_stderr}")
 endif()
 
@@ -94,12 +103,13 @@ execute_process(
   OUTPUT_VARIABLE repl_stdout
   ERROR_VARIABLE repl_stderr)
 if(NOT repl_status EQUAL 0 OR NOT repl_stdout MATCHES "REPL commands:" OR
+   NOT repl_stdout MATCHES ":max-iterations COUNT" OR
    NOT repl_stdout MATCHES "Backend choices:" OR
    NOT repl_stdout MATCHES "optimization: auto, ceres, nlopt" OR
    NOT repl_stdout MATCHES "1\\.41421356237309504880168872421" OR
    NOT repl_stdout MATCHES "backend: ginac" OR
    NOT repl_stdout MATCHES "3" OR NOT repl_stdout MATCHES "1 variables" OR
-   NOT repl_stderr STREQUAL "")
+   NOT repl_stderr MATCHES "factorial iteration limit exceeded")
   message(FATAL_ERROR "REPL check failed: status=${repl_status}, stdout=${repl_stdout}, stderr=${repl_stderr}")
 endif()
 
