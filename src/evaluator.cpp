@@ -16,6 +16,7 @@
 #include <symengine/functions.h>
 #include <symengine/integer.h>
 #include <symengine/infinity.h>
+#include <symengine/ntheory.h>
 #include <symengine/number.h>
 #include <symengine/parser.h>
 #include <symengine/pow.h>
@@ -641,8 +642,13 @@ bool contains_fold(const Node &node) {
     return std::any_of(node.children.begin(), node.children.end(), contains_fold);
 }
 
+bool contains_factorial(const Node &node) {
+    if (node.kind == NodeKind::Call && node.text == "factorial") return true;
+    return std::any_of(node.children.begin(), node.children.end(), contains_factorial);
+}
+
 /**
- * Convert a scalar AST to SymEngine while evaluating finite folds.
+ * Convert a scalar AST to SymEngine while evaluating bounded discrete operations.
  *
  * Args:
  *     node: Scalar AST node to convert.
@@ -743,6 +749,37 @@ std::optional<RCP<const Basic>> scalar_expression(
         return SymEngine::mul(*left, *right);
     }
     if (node.kind == NodeKind::Call) {
+        if (node.text == "factorial" && node.children.size() == 1) {
+            auto argument = scalar_expression(node.children.front(), bindings, locals, max_iterations,
+                                              iterations, deadline, error);
+            if (!argument) return std::nullopt;
+            if (!SymEngine::is_a<SymEngine::Integer>(**argument)) {
+                if (SymEngine::is_a_Number(**argument)) {
+                    error = failure(TEXSOLVE_STATUS_SEMANTIC_ERROR, TEXSOLVE_DIAGNOSTIC_DOMAIN_ERROR,
+                                    "factorial requires a nonnegative integer", "symengine");
+                    return std::nullopt;
+                }
+                return SymEngine::parse("factorial(" + SymEngine::str(**argument) + ")");
+            }
+            const auto &integer = SymEngine::down_cast<const SymEngine::Integer &>(**argument);
+            uint64_t value = 0;
+            const std::string rendered = SymEngine::str(integer);
+            const auto [end, conversion_error] = std::from_chars(
+                rendered.data(), rendered.data() + rendered.size(), value);
+            if (integer.is_negative()) {
+                error = failure(TEXSOLVE_STATUS_SEMANTIC_ERROR, TEXSOLVE_DIAGNOSTIC_DOMAIN_ERROR,
+                                "factorial requires a nonnegative integer", "symengine");
+                return std::nullopt;
+            }
+            if (conversion_error != std::errc{} || end != rendered.data() + rendered.size() ||
+                value > max_iterations || iterations > max_iterations - value) {
+                error = failure(TEXSOLVE_STATUS_RESOURCE_LIMIT, TEXSOLVE_DIAGNOSTIC_ITERATION_LIMIT,
+                                "factorial iteration limit exceeded", "symengine");
+                return std::nullopt;
+            }
+            iterations += value;
+            return SymEngine::factorial(static_cast<unsigned long>(value));
+        }
         if (node.text.starts_with("sqrt:") && node.children.size() == 1) {
             const std::string_view degree(node.text.data() + 5, node.text.size() - 5);
             if (const Node *base = odd_root_power_base(node.children.front(), degree);
@@ -814,7 +851,7 @@ Evaluation evaluate_symengine(const Node &root, int32_t operation,
                               std::chrono::steady_clock::time_point deadline,
                               int32_t integration_backend) {
     const std::string backend = "symengine";
-    if (root.kind == NodeKind::Fold) {
+    if (contains_fold(root) || contains_factorial(root)) {
         return evaluate_fold(root, root.text.starts_with("product"), bindings, precision,
                              max_iterations, deadline, backend);
     }

@@ -124,6 +124,20 @@ BOOST_AUTO_TEST_CASE(preserves_exact_numbers_and_result_lifetime) {
     texsolve_result_destroy(rational);
 }
 
+BOOST_AUTO_TEST_CASE(evaluates_factorials_inside_scalar_expressions) {
+    texsolve_context *context = nullptr;
+    BOOST_REQUIRE_EQUAL(texsolve_context_create(&context), TEXSOLVE_STATUS_OK);
+    auto *factorial = execute(context, "11!");
+    BOOST_TEST(texsolve_result_kind(factorial) == TEXSOLVE_RESULT_INTEGER);
+    BOOST_TEST(text(texsolve_result_exact_latex(factorial)) == "39916800");
+    texsolve_result_destroy(factorial);
+
+    auto *nested = execute(context, "1+(5+6)!");
+    BOOST_TEST(text(texsolve_result_exact_latex(nested)) == "39916801");
+    texsolve_result_destroy(nested);
+    texsolve_context_destroy(context);
+}
+
 BOOST_AUTO_TEST_CASE(finite_decimals_and_real_square_roots_are_simplified_exactly) {
     texsolve_context *context = nullptr;
     BOOST_REQUIRE_EQUAL(texsolve_context_create(&context), TEXSOLVE_STATUS_OK);
