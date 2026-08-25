@@ -51,6 +51,12 @@ BOOST_AUTO_TEST_CASE(limits_and_integrals_follow_analytic_then_numeric_policy) {
     auto *infinite_ratio = execute(context, R"(\lim_{x \to \infty}\frac{x+1}{x})");
     BOOST_TEST(text(texsolve_result_exact_latex(infinite_ratio)) == "1");
     texsolve_result_destroy(infinite_ratio);
+    auto *higher_order_pole = execute(context, R"(\lim_{x\to 0}\frac{1}{x^2})");
+    BOOST_TEST(text(texsolve_result_exact_latex(higher_order_pole)) == R"(\infty)");
+    texsolve_result_destroy(higher_order_pole);
+    auto *higher_order_lhopital = execute(context, R"(\lim_{x\to 0}\frac{1-\cos{x}}{x^2})");
+    BOOST_TEST(text(texsolve_result_exact_latex(higher_order_lhopital)) == R"(\frac{1}{2})");
+    texsolve_result_destroy(higher_order_lhopital);
 
     auto *double_integral = execute(context, R"(\iint_{0}^{1}xy\,dx\,dy)");
     BOOST_TEST(text(texsolve_result_exact_latex(double_integral)) == R"(\frac{1}{4})");
@@ -81,6 +87,27 @@ BOOST_AUTO_TEST_CASE(limits_and_integrals_follow_analytic_then_numeric_policy) {
     texsolve_result *invalid_result = nullptr;
     BOOST_TEST(texsolve_execute(context, &invalid_request, &invalid_result) == TEXSOLVE_STATUS_NOT_CONVERGED);
     texsolve_result_destroy(invalid_result);
+    texsolve_context_destroy(context);
+}
+
+
+BOOST_AUTO_TEST_CASE(infinite_limits_use_asymptotic_properties_without_substituting_infinity) {
+    texsolve_context *context = nullptr;
+    BOOST_REQUIRE_EQUAL(texsolve_context_create(&context), TEXSOLVE_STATUS_OK);
+    const std::pair<std::string_view, std::string_view> cases[] = {
+        {R"(\lim_{x\to\infty}\frac{\sin{x}}{x})", "0"},
+        {R"(\lim_{x\to\infty}\sin{x}x^{-1})", "0"},
+        {R"(\lim_{x\to\infty}\frac{\cos{x}}{x})", "0"},
+        {R"(\lim_{x\to\infty}\frac{\tanh{x}}{x})", "0"},
+        {R"(\lim_{x\to\infty}\frac{x-\sin{x}}{x})", "1"},
+        {R"(\lim_{x\to\infty}\frac{\ln{x}}{x})", "0"},
+        {R"(\lim_{x\to\infty}\frac{x}{\exp{x}})", "0"},
+    };
+    for (const auto &[input, expected] : cases) {
+        auto *result = execute(context, input);
+        BOOST_TEST(text(texsolve_result_exact_latex(result)) == expected);
+        texsolve_result_destroy(result);
+    }
     texsolve_context_destroy(context);
 }
 

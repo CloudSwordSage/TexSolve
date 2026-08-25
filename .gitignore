@@ -12,3 +12,5 @@ build_consumer/
 codegraph.json
 
 !.github/actions/build/
+
+todo*

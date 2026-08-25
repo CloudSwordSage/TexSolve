@@ -262,47 +262,300 @@ std::optional<std::string> integrate_simple(const Node &node, const std::string 
     return std::nullopt;
 }
 
-std::optional<RCP<const Basic>> analytic_limit(const Node &root,
-                                               const std::map<std::string, Node> &bindings) {
-    if (root.children.size() != 2) return std::nullopt;
-    const auto direction_marker = root.text.find(':');
-    const auto variable_name = root.text.substr(0, direction_marker);
-    const auto direction = direction_marker == std::string::npos ? std::string{} : root.text.substr(direction_marker + 1);
-    const auto variable = SymEngine::symbol(symbol_name(variable_name));
-    const auto target = SymEngine::parse(to_backend_syntax(root.children[0]));
-    const Node &body = root.children[1];
-    auto expression = symengine_expression(body, bindings);
-    auto direct = expression->subs({{variable, target}});
-    if (body.kind != NodeKind::Binary || (body.text != "frac" && body.text != "/")) {
-        const auto rendered = SymEngine::str(*direct);
-        return rendered == "nan" || rendered.find("ComplexInf") != std::string::npos
-                   ? std::nullopt : std::optional<RCP<const Basic>>(direct);
+enum class GrowthClass { Bounded, Logarithmic, Polynomial, Exponential, Unknown };
+
+struct AsymptoticInfo {
+    GrowthClass growth = GrowthClass::Unknown;
+    int degree = 0;
+    std::optional<RCP<const Basic>> limit;
+    std::optional<RCP<const Basic>> leading;
+};
+
+AsymptoticInfo finite_asymptotic(const RCP<const Basic> &value) {
+    return {GrowthClass::Bounded, 0, value, std::nullopt};
+}
+
+int growth_rank(const AsymptoticInfo &value) {
+    switch (value.growth) {
+        case GrowthClass::Bounded: return 0;
+        case GrowthClass::Logarithmic: return 1;
+        case GrowthClass::Polynomial: return 2;
+        case GrowthClass::Exponential: return 3;
+        case GrowthClass::Unknown: return -1;
     }
-    auto numerator = SymEngine::parse(to_backend_syntax(body.children[0]));
-    auto denominator = SymEngine::parse(to_backend_syntax(body.children[1]));
-    for (int order = 0; order < 8; ++order) {
-        const auto numerator_value = numerator->subs({{variable, target}});
-        const auto denominator_value = denominator->subs({{variable, target}});
-        if (!SymEngine::is_number_and_zero(*denominator_value)) {
-            const auto quotient = SymEngine::div(numerator_value, denominator_value);
-            const auto rendered = SymEngine::str(*quotient);
-            if (rendered != "nan" && rendered != "NaN" &&
-                rendered.find("ComplexInf") == std::string::npos) {
-                return quotient;
+    return -1;
+}
+
+int compare_growth(const AsymptoticInfo &left, const AsymptoticInfo &right) {
+    // Unknown growth is incomparable; callers must keep the result unknown.
+    if (left.growth == GrowthClass::Unknown || right.growth == GrowthClass::Unknown) return 0;
+    const int rank_difference = growth_rank(left) - growth_rank(right);
+    if (rank_difference != 0) return rank_difference < 0 ? -1 : 1;
+    if (left.growth == GrowthClass::Polynomial && left.degree != right.degree) {
+        return left.degree < right.degree ? -1 : 1;
+    }
+    return 0;
+}
+
+int numeric_sign(const RCP<const Basic> &value) {
+    try {
+        const double number = SymEngine::eval_double(*value);
+        return (number > 0.0) - (number < 0.0);
+    } catch (...) {
+        return 0;
+    }
+}
+
+AsymptoticInfo negate_asymptotic(AsymptoticInfo value) {
+    if (value.limit) value.limit = SymEngine::neg(*value.limit);
+    if (value.leading) value.leading = SymEngine::neg(*value.leading);
+    return value;
+}
+
+/**
+ * Recursively infer finite limits and coarse growth at signed infinity.
+ *
+ * Args:
+ *     node: Scalar AST to analyze.
+ *     variable: Limit variable in backend spelling.
+ *     infinity_sign: Positive or negative infinity direction.
+ *     bindings: Request and context substitutions.
+ * Returns:
+ *     Known limit and growth information; Unknown when no safe rule applies.
+ */
+AsymptoticInfo asymptotic_info(const Node &node, std::string_view variable, int infinity_sign,
+                               const std::map<std::string, Node> &bindings) {
+    if (node.kind == NodeKind::Integer || node.kind == NodeKind::Real) {
+        return finite_asymptotic(symengine_expression(node, bindings));
+    }
+    if (node.kind == NodeKind::Symbol) {
+        if (symbol_name(node.text) == variable) {
+            return {GrowthClass::Polynomial, 1, std::nullopt,
+                    RCP<const Basic>(SymEngine::integer(infinity_sign))};
+        }
+        if (const auto binding = bindings.find(node.text); binding != bindings.end()) {
+            return asymptotic_info(binding->second, variable, infinity_sign, bindings);
+        }
+        return finite_asymptotic(symengine_expression(node, bindings));
+    }
+    if (node.kind == NodeKind::Unary && node.children.size() == 1) {
+        auto child = asymptotic_info(node.children.front(), variable, infinity_sign, bindings);
+        return node.text == "-" ? negate_asymptotic(std::move(child)) : child;
+    }
+    if (node.kind == NodeKind::Call && node.children.size() == 1) {
+        auto argument = asymptotic_info(node.children.front(), variable, infinity_sign, bindings);
+        if (argument.limit) {
+            try {
+                const std::string function = node.text == "ln" ? "log" : node.text;
+                return finite_asymptotic(SymEngine::parse(
+                    function + "(" + SymEngine::str(**argument.limit) + ")"));
+            } catch (...) {
+                return {};
+            }
+        }
+        if (node.text == "sin" || node.text == "cos" || node.text == "tanh") {
+            return {GrowthClass::Bounded, 0, std::nullopt, std::nullopt};
+        }
+        if (node.text == "ln" || node.text == "log") {
+            if (growth_rank(argument) > 0) {
+                return {GrowthClass::Logarithmic, 0, std::nullopt,
+                        RCP<const Basic>(SymEngine::integer(1))};
+            }
+            return {};
+        }
+        if (node.text == "exp" && argument.leading) {
+            const int sign = numeric_sign(*argument.leading);
+            if (sign < 0) return finite_asymptotic(RCP<const Basic>(SymEngine::integer(0)));
+            if (sign > 0) {
+                return {GrowthClass::Exponential, 0, std::nullopt,
+                        RCP<const Basic>(SymEngine::integer(1))};
+            }
+        }
+        return {};
+    }
+    if (node.kind != NodeKind::Binary || node.children.size() != 2) return {};
+
+    auto left = asymptotic_info(node.children[0], variable, infinity_sign, bindings);
+    auto right = asymptotic_info(node.children[1], variable, infinity_sign, bindings);
+    if (node.text == "+" || node.text == "-") {
+        if (left.limit && right.limit) {
+            return finite_asymptotic(node.text == "+"
+                ? SymEngine::add(*left.limit, *right.limit)
+                : SymEngine::sub(*left.limit, *right.limit));
+        }
+        const int comparison = compare_growth(left, right);
+        if (comparison > 0) return left;
+        if (comparison < 0) return node.text == "-" ? negate_asymptotic(std::move(right)) : right;
+        if (left.growth == GrowthClass::Polynomial && left.leading && right.leading) {
+            auto leading = node.text == "+"
+                ? SymEngine::add(*left.leading, *right.leading)
+                : SymEngine::sub(*left.leading, *right.leading);
+            if (!SymEngine::is_number_and_zero(*leading)) {
+                return {GrowthClass::Polynomial, left.degree, std::nullopt, leading};
+            }
+        }
+        return left.growth == GrowthClass::Bounded
+            ? AsymptoticInfo{GrowthClass::Bounded, 0, std::nullopt, std::nullopt}
+            : AsymptoticInfo{};
+    }
+    if (node.text == "^") {
+        const Node *exponent_node = &node.children[1];
+        int exponent_sign = 1;
+        if (exponent_node->kind == NodeKind::Unary && exponent_node->text == "-" &&
+            exponent_node->children.size() == 1) {
+            exponent_sign = -1;
+            exponent_node = &exponent_node->children.front();
+        }
+        if (exponent_node->kind != NodeKind::Integer) return {};
+        int exponent = 0;
+        const auto [end, error] = std::from_chars(exponent_node->text.data(),
+            exponent_node->text.data() + exponent_node->text.size(), exponent);
+        if (error != std::errc{} || end != exponent_node->text.data() + exponent_node->text.size()) return {};
+        exponent *= exponent_sign;
+        if (left.limit) {
+            if (exponent < 0 && SymEngine::is_number_and_zero(**left.limit)) return {};
+            return finite_asymptotic(SymEngine::pow(*left.limit, SymEngine::integer(exponent)));
+        }
+        if (exponent == 0) return finite_asymptotic(RCP<const Basic>(SymEngine::integer(1)));
+        if (exponent < 0 && growth_rank(left) > 0) {
+            return finite_asymptotic(RCP<const Basic>(SymEngine::integer(0)));
+        }
+        if (exponent > 0 && left.growth == GrowthClass::Polynomial) {
+            return {GrowthClass::Polynomial, left.degree * exponent, std::nullopt,
+                    left.leading ? std::optional<RCP<const Basic>>(
+                        SymEngine::pow(*left.leading, SymEngine::integer(exponent))) : std::nullopt};
+        }
+        return {};
+    }
+    if (node.text == "frac" || node.text == "/") {
+        if (right.limit && !SymEngine::is_number_and_zero(**right.limit)) {
+            if (left.limit) return finite_asymptotic(SymEngine::div(*left.limit, *right.limit));
+            if (left.leading) left.leading = SymEngine::div(*left.leading, *right.limit);
+            return left;
+        }
+        const int comparison = compare_growth(left, right);
+        if (comparison < 0) return finite_asymptotic(RCP<const Basic>(SymEngine::integer(0)));
+        if (comparison == 0 && left.growth == GrowthClass::Polynomial &&
+            left.leading && right.leading) {
+            return finite_asymptotic(SymEngine::div(*left.leading, *right.leading));
+        }
+        if (comparison > 0 && left.growth == GrowthClass::Polynomial &&
+            right.growth == GrowthClass::Polynomial && left.leading && right.leading) {
+            return {GrowthClass::Polynomial, left.degree - right.degree, std::nullopt,
+                    SymEngine::div(*left.leading, *right.leading)};
+        }
+        return {};
+    }
+
+    if (left.limit && right.limit) {
+        return finite_asymptotic(SymEngine::mul(*left.limit, *right.limit));
+    }
+    if (left.limit && right.growth == GrowthClass::Bounded &&
+        SymEngine::is_number_and_zero(**left.limit)) return left;
+    if (right.limit && left.growth == GrowthClass::Bounded &&
+        SymEngine::is_number_and_zero(**right.limit)) return right;
+    if (left.limit) {
+        if (right.leading) right.leading = SymEngine::mul(*left.limit, *right.leading);
+        return right;
+    }
+    if (right.limit) {
+        if (left.leading) left.leading = SymEngine::mul(*left.leading, *right.limit);
+        return left;
+    }
+    if (left.growth == GrowthClass::Polynomial && right.growth == GrowthClass::Polynomial) {
+        return {GrowthClass::Polynomial, left.degree + right.degree, std::nullopt,
+                left.leading && right.leading
+                    ? std::optional<RCP<const Basic>>(SymEngine::mul(*left.leading, *right.leading))
+                    : std::nullopt};
+    }
+    return growth_rank(left) >= growth_rank(right) ? left : right;
+}
+
+bool finite_backend_value(const RCP<const Basic> &value) {
+    const std::string rendered = SymEngine::str(*value);
+    return rendered != "nan" && rendered != "NaN" &&
+           rendered.find("ComplexInf") == std::string::npos &&
+           rendered.find("oo") == std::string::npos;
+}
+
+/**
+ * Evaluate a finite or infinite symbolic limit without leaking backend failures.
+ *
+ * Args:
+ *     root: Limit AST.
+ *     bindings: Request and context substitutions.
+ *     max_iterations: Derivative budget for finite indeterminate forms.
+ *     deadline: Absolute cooperative deadline.
+ * Returns:
+ *     Exact limit, or no value when the available rules cannot prove one.
+ */
+std::optional<RCP<const Basic>> analytic_limit(
+    const Node &root, const std::map<std::string, Node> &bindings,
+    uint32_t max_iterations, std::chrono::steady_clock::time_point deadline) {
+    if (root.children.size() != 2) return std::nullopt;
+    try {
+        const auto direction_marker = root.text.find(':');
+        const auto variable_name = root.text.substr(0, direction_marker);
+        const auto direction = direction_marker == std::string::npos
+                                   ? std::string{} : root.text.substr(direction_marker + 1);
+        const auto variable = SymEngine::symbol(symbol_name(variable_name));
+        const auto target = SymEngine::parse(to_backend_syntax(root.children[0]));
+        const std::string target_text = SymEngine::str(*target);
+        const Node &body = root.children[1];
+        if (target_text.find("oo") != std::string::npos) {
+            auto info = asymptotic_info(body, symbol_name(variable_name),
+                                        target_text.starts_with("-") ? -1 : 1, bindings);
+            if (info.limit) return info.limit;
+            if (info.leading && growth_rank(info) > 0) {
+                const int sign = numeric_sign(*info.leading);
+                if (sign != 0) return RCP<const Basic>(SymEngine::infty(sign));
+            }
+            return std::nullopt;
+        }
+
+        auto expression = symengine_expression(body, bindings);
+        auto direct = expression->subs({{variable, target}});
+        if (finite_backend_value(direct)) return direct;
+        if (body.kind != NodeKind::Binary || (body.text != "frac" && body.text != "/")) {
+            return std::nullopt;
+        }
+
+        auto numerator = symengine_expression(body.children[0], bindings);
+        auto denominator = symengine_expression(body.children[1], bindings);
+        for (uint32_t order = 0; order < max_iterations; ++order) {
+            if (std::chrono::steady_clock::now() >= deadline) return std::nullopt;
+            const auto numerator_value = numerator->subs({{variable, target}});
+            const auto denominator_value = denominator->subs({{variable, target}});
+            const bool numerator_zero = SymEngine::is_number_and_zero(*numerator_value);
+            const bool denominator_zero = SymEngine::is_number_and_zero(*denominator_value);
+            const bool infinity_over_infinity =
+                !finite_backend_value(numerator_value) && !finite_backend_value(denominator_value);
+            if (!denominator_zero && !infinity_over_infinity) {
+                const auto quotient = SymEngine::div(numerator_value, denominator_value);
+                return finite_backend_value(quotient)
+                           ? std::optional<RCP<const Basic>>(quotient) : std::nullopt;
+            }
+            if (denominator_zero && !numerator_zero) {
+                auto local_denominator = denominator;
+                for (uint32_t zero_order = 1; zero_order <= max_iterations - order; ++zero_order) {
+                    local_denominator = local_denominator->diff(variable);
+                    const auto coefficient = local_denominator->subs({{variable, target}});
+                    if (SymEngine::is_number_and_zero(*coefficient)) continue;
+                    if (direction.empty() && zero_order % 2 != 0) return std::nullopt;
+                    const int side = direction == "-" && zero_order % 2 != 0 ? -1 : 1;
+                    const int sign = numeric_sign(numerator_value) * numeric_sign(coefficient) * side;
+                    return sign == 0 ? std::nullopt
+                                     : std::optional<RCP<const Basic>>(SymEngine::infty(sign));
+                }
+                return std::nullopt;
+            }
+            if (!(numerator_zero && denominator_zero) && !infinity_over_infinity) {
+                return std::nullopt;
             }
             numerator = numerator->diff(variable);
             denominator = denominator->diff(variable);
-            continue;
         }
-        if (!SymEngine::is_number_and_zero(*numerator_value)) {
-            if (direction.empty()) return std::nullopt;
-            const auto slope = denominator->diff(variable)->subs({{variable, target}});
-            const double sign = SymEngine::eval_double(*numerator_value) * SymEngine::eval_double(*slope) *
-                                (direction == "+" ? 1.0 : -1.0);
-            return SymEngine::infty(sign < 0 ? -1 : 1);
-        }
-        numerator = numerator->diff(variable);
-        denominator = denominator->diff(variable);
+    } catch (...) {
     }
     return std::nullopt;
 }
@@ -629,7 +882,7 @@ Evaluation evaluate_symengine(const Node &root, int32_t operation,
         return result;
     }
     if (root.kind == NodeKind::Limit) {
-        const auto limited = analytic_limit(root, bindings);
+        const auto limited = analytic_limit(root, bindings, max_iterations, deadline);
         if (!limited) return failure(TEXSOLVE_STATUS_NO_ANALYTIC_SOLUTION,
             TEXSOLVE_DIAGNOSTIC_BACKEND_CAPABILITY, "no analytic limit is available", backend);
         Evaluation result;
@@ -677,7 +930,12 @@ Evaluation evaluate_ginac(const Node &root, int32_t operation,
     // GiNaC::Digits is process-global, so the lock covers precision selection and evaluation.
     static std::mutex ginac_mutex;
     const std::lock_guard lock(ginac_mutex);
-    if (contains_fold(root) || root.kind == NodeKind::Integral || root.kind == NodeKind::Limit) {
+    if (root.kind == NodeKind::Limit) {
+        return failure(TEXSOLVE_STATUS_BACKEND_UNSUPPORTED,
+                       TEXSOLVE_DIAGNOSTIC_BACKEND_CAPABILITY,
+                       "GiNaC limit evaluation is unavailable", "ginac");
+    }
+    if (contains_fold(root) || root.kind == NodeKind::Integral) {
         auto result = evaluate_symengine(root, operation, bindings, precision, max_iterations,
                                          deadline, integration_backend);
         result.backend = "ginac";
