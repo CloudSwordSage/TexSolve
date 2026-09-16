@@ -166,12 +166,73 @@ typedef struct texsolve_diagnostic {
 
 三段以及段内条目均按上述顺序返回；调用方仍应按 name 读取。snapshot 不包含后端缓存。
 
-## 7. Context 与线程规则
+## 7. Context 会话生命周期
+
+每次 `texsolve_context_create` 都创建一个独立会话。调用方可以同时持有任意多个 context；一个 context 中的定义、配置和后续提交不会影响其他 context。每个 context 可重复传给 `texsolve_execute`，效果与 REPL 连续输入一致：成功的 `:=` 变量或函数定义会保留，后续请求可直接引用。`texsolve_context_configure` 设置的默认精度、资源限额和后端偏好也会保留。
+
+请求字段中的非零配置只覆盖当前请求，不写回 context。`texsolve_request.bindings`、边界和 residual 也只对当前请求有效；需要跨提交保留的变量或函数必须使用 `:=` 定义。每个 `texsolve_execute` 返回的 result 相互独立，调用方应在读取完成后逐个调用 `texsolve_result_destroy`。result 是否已销毁不影响 context，context 是否已销毁也不影响此前返回且尚未销毁的 result。
+
+`texsolve_context_reset` 只清空该 context 的变量和函数，保留该 context 的配置。`texsolve_context_destroy` 只释放指定 context；其他 context 可继续提交。销毁后不得再次使用该 context 指针。
+
+以下示例创建两个彼此隔离的会话，并向第一个会话连续提交定义和计算：
+
+```c
+#include <string.h>
+#include <texsolve/texsolve.h>
+
+static texsolve_status submit(texsolve_context *session, const char *latex,
+                              texsolve_result **out) {
+    texsolve_request request = {0};
+    request.struct_size = sizeof(request);
+    request.abi_version = TEXSOLVE_ABI_VERSION;
+    request.operation = TEXSOLVE_OPERATION_AUTO;
+    request.latex = (texsolve_string_view){latex, strlen(latex)};
+    return texsolve_execute(session, &request, out);
+}
+
+int main(void) {
+    texsolve_context *first = NULL;
+    texsolve_context *second = NULL;
+    texsolve_result *result = NULL;
+
+    if (texsolve_context_create(&first) != TEXSOLVE_STATUS_OK ||
+        texsolve_context_create(&second) != TEXSOLVE_STATUS_OK) {
+        texsolve_context_destroy(first);
+        texsolve_context_destroy(second);
+        return 1;
+    }
+
+    texsolve_status status = submit(first, "x:=2", &result);
+    texsolve_result_destroy(result);
+    result = NULL;
+    if (status != TEXSOLVE_STATUS_OK) {
+        texsolve_context_destroy(first);
+        texsolve_context_destroy(second);
+        return 1;
+    }
+
+    status = submit(first, "x+3", &result);
+    /* first 中保留 x，结果为 5；second 中仍未定义 x。 */
+    texsolve_result_destroy(result);
+    result = NULL;
+    if (status != TEXSOLVE_STATUS_OK) {
+        texsolve_context_destroy(first);
+        texsolve_context_destroy(second);
+        return 1;
+    }
+
+    texsolve_context_destroy(first);
+    texsolve_context_destroy(second);
+    return 0;
+}
+```
+
+## 8. Context 与线程规则
 
 不同 context 可由不同线程同时调用。同一 context 的 configure、snapshot、execute、reset 和 destroy 必须由调用方串行化。Result 是只读对象，不同 result 可并发读取；同一 result 的访问器也可并发读取。context 销毁不使已返回 result 失效。
 
 定义请求仅在完整成功后提交。任何错误、截止时间或限额失败都不得修改已有定义。库不得保存 request 输入指针。
 
-## 8. CLI 对 ABI 的使用
+## 9. CLI 对 ABI 的使用
 
 CLI 的计算、定义、配置和定义列表只调用本规范函数；默认链接共享目标。`--debug`/`-d` 由 CLI 在调用 ABI 前访问内部解析调试入口完成，该入口不安装、不导出且不属于 ABI。静态消费测试使用同一头并定义 `TEXSOLVE_STATIC`。

@@ -229,7 +229,9 @@ typedef struct texsolve_diagnostic {
 TEXSOLVE_API uint32_t TEXSOLVE_CALL texsolve_abi_version(void);
 
 /**
- * Create an independent calculation context.
+ * Create an independent persistent calculation session.
+ * Definitions and configuration survive repeated texsolve_execute calls on this context.
+ * Each context owns isolated state and may be destroyed independently.
  * Args: out: Receives the allocated context.
  * Returns: TEXSOLVE_STATUS_OK or an error status.
  */
@@ -239,7 +241,7 @@ TEXSOLVE_API texsolve_status TEXSOLVE_CALL texsolve_context_create(texsolve_cont
 TEXSOLVE_API void TEXSOLVE_CALL texsolve_context_destroy(texsolve_context *ctx);
 
 /**
- * Replace context defaults atomically.
+ * Replace persistent context defaults atomically.
  * Args: ctx: Context. options: ABI-versioned options.
  * Returns: TEXSOLVE_STATUS_OK or validation error.
  */
@@ -254,10 +256,16 @@ TEXSOLVE_API texsolve_status TEXSOLVE_CALL texsolve_context_configure(
 TEXSOLVE_API texsolve_status TEXSOLVE_CALL texsolve_context_snapshot(
     const texsolve_context *ctx, texsolve_result **out);
 
-/** Clear definitions while preserving configuration. Returns: Status. */
+/** Clear this context's definitions while preserving its configuration. Returns: Status. */
 TEXSOLVE_API texsolve_status TEXSOLVE_CALL texsolve_context_reset(texsolve_context *ctx);
 
-/** Execute one request. Args: ctx: Context. request: Request. out: Result. Returns: Status. */
+/**
+ * Submit one request to a persistent context.
+ * Successful definitions are available to later submissions on the same context.
+ * Request overrides and bindings affect only this submission.
+ * Args: ctx: Context. request: Request. out: Result.
+ * Returns: Status.
+ */
 TEXSOLVE_API texsolve_status TEXSOLVE_CALL texsolve_execute(
     texsolve_context *ctx, const texsolve_request *request, texsolve_result **out);
 

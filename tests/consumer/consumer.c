@@ -8,10 +8,12 @@ int main(int argc, char **argv) {
     const int check_i18n = argc == 2 && strcmp(argv[1], "--i18n") == 0;
     const char *input = check_i18n ? "\\unknown{x}" : "1+1";
     texsolve_context *context = NULL;
+    texsolve_context *other_context = NULL;
     texsolve_result *result = NULL;
     texsolve_request request = {0};
     CHECK(texsolve_abi_version() == TEXSOLVE_ABI_VERSION);
     CHECK(texsolve_context_create(&context) == TEXSOLVE_STATUS_OK);
+    CHECK(texsolve_context_create(&other_context) == TEXSOLVE_STATUS_OK);
     request.struct_size = sizeof(request);
     request.abi_version = TEXSOLVE_ABI_VERSION;
     request.latex = (texsolve_string_view){input, strlen(input)};
@@ -24,11 +26,35 @@ int main(int argc, char **argv) {
         CHECK(diagnostic.message.size == strlen(expected));
         CHECK(memcmp(diagnostic.message.data, expected, diagnostic.message.size) == 0);
     } else {
+        input = "x:=2";
+        request.latex = (texsolve_string_view){input, strlen(input)};
+        CHECK(texsolve_execute(context, &request, &result) == TEXSOLVE_STATUS_OK);
+        texsolve_result_destroy(result);
+        result = NULL;
+
+        input = "x+3";
+        request.latex = (texsolve_string_view){input, strlen(input)};
         CHECK(texsolve_execute(context, &request, &result) == TEXSOLVE_STATUS_OK);
         CHECK(texsolve_result_kind(result) == TEXSOLVE_RESULT_INTEGER);
-        CHECK(texsolve_result_exact_latex(result).size == 1);
+        CHECK(texsolve_result_exact_latex(result).size == 1 &&
+              texsolve_result_exact_latex(result).data[0] == '5');
+        texsolve_result_destroy(result);
+        result = NULL;
+
+        input = "x:=7";
+        request.latex = (texsolve_string_view){input, strlen(input)};
+        CHECK(texsolve_execute(other_context, &request, &result) == TEXSOLVE_STATUS_OK);
+        texsolve_result_destroy(result);
+        result = NULL;
+
+        input = "x";
+        request.latex = (texsolve_string_view){input, strlen(input)};
+        CHECK(texsolve_execute(other_context, &request, &result) == TEXSOLVE_STATUS_OK);
+        CHECK(texsolve_result_exact_latex(result).size == 1 &&
+              texsolve_result_exact_latex(result).data[0] == '7');
     }
     texsolve_result_destroy(result);
     texsolve_context_destroy(context);
+    texsolve_context_destroy(other_context);
     return 0;
 }

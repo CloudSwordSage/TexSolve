@@ -566,55 +566,32 @@ texsolve_status TEXSOLVE_CALL texsolve_execute(
         }
 
         auto result = make_node(TEXSOLVE_RESULT_SYMBOLIC, {}, std::string(latex));
-        if (definition) {
-            const auto &target = parsed.root.children[0];
-            const auto &body = parsed.root.children[1];
-            if (target.kind == texsolve::NodeKind::Symbol) {
-                ctx->variables[target.text] = source_of(latex, body);
-                ctx->functions.erase(target.text);
-                result->name = target.text;
-            } else {
-                if (contains_call(body, target.text)) {
-                    parsed.message = "recursive user functions are unsupported";
-                    parsed.diagnostic_code = TEXSOLVE_DIAGNOSTIC_ARITY_MISMATCH;
-                    parsed.error_begin = body.begin;
-                    parsed.error_end = body.end;
-                    *out = make_error(TEXSOLVE_STATUS_SEMANTIC_ERROR, parsed).release();
-                    return TEXSOLVE_STATUS_SEMANTIC_ERROR;
-                }
-                Definition value;
-                for (const auto &parameter : target.children) value.parameters.push_back(parameter.text);
-                value.body = source_of(latex, body);
-                ctx->functions[target.text] = std::move(value);
-                ctx->variables.erase(target.text);
-                result->name = target.text;
+        if (!definition) {
+            texsolve::ParseOutput expansion_error;
+            std::vector<std::string> active_functions;
+            uint64_t expansion_nodes = parsed.node_count ? parsed.node_count : count_nodes(parsed.root, nodes);
+            const auto expansion_deadline = started + std::chrono::milliseconds(effective.deadline_ms);
+            if (!expand_functions(parsed.root, ctx->functions, active_functions, expansion_error,
+                                  nesting, nodes, expansion_nodes, expansion_deadline)) {
+                const texsolve_status status = expansion_error.diagnostic_code == TEXSOLVE_DIAGNOSTIC_DEADLINE
+                                                   ? TEXSOLVE_STATUS_DEADLINE_EXCEEDED
+                                               : (expansion_error.diagnostic_code == TEXSOLVE_DIAGNOSTIC_NESTING_LIMIT ||
+                                                  expansion_error.diagnostic_code == TEXSOLVE_DIAGNOSTIC_AST_NODE_LIMIT)
+                                                   ? TEXSOLVE_STATUS_RESOURCE_LIMIT
+                                                   : TEXSOLVE_STATUS_SEMANTIC_ERROR;
+                *out = make_error(status, expansion_error).release();
+                return status;
             }
-            *out = result.release();
-            return TEXSOLVE_STATUS_OK;
-        }
-
-        texsolve::ParseOutput expansion_error;
-        std::vector<std::string> active_functions;
-        uint64_t expansion_nodes = parsed.node_count ? parsed.node_count : count_nodes(parsed.root, nodes);
-        const auto expansion_deadline = started + std::chrono::milliseconds(effective.deadline_ms);
-        if (!expand_functions(parsed.root, ctx->functions, active_functions, expansion_error,
-                              nesting, nodes, expansion_nodes, expansion_deadline)) {
-            const texsolve_status status = expansion_error.diagnostic_code == TEXSOLVE_DIAGNOSTIC_DEADLINE
-                                               ? TEXSOLVE_STATUS_DEADLINE_EXCEEDED
-                                           : (expansion_error.diagnostic_code == TEXSOLVE_DIAGNOSTIC_NESTING_LIMIT ||
-                                              expansion_error.diagnostic_code == TEXSOLVE_DIAGNOSTIC_AST_NODE_LIMIT)
-                                               ? TEXSOLVE_STATUS_RESOURCE_LIMIT
-                                               : TEXSOLVE_STATUS_SEMANTIC_ERROR;
-            *out = make_error(status, expansion_error).release();
-            return status;
         }
 
         std::map<std::string, texsolve::Node> bindings;
         std::map<std::string, texsolve::Node> lower_bounds;
         std::map<std::string, texsolve::Node> upper_bounds;
-        for (const auto &[name, value] : ctx->variables) {
-            auto binding = texsolve::parse_for_debug(value, nesting, nodes);
-            if (binding.ok) bindings.emplace(name, std::move(binding.root));
+        if (!definition) {
+            for (const auto &[name, value] : ctx->variables) {
+                auto binding = texsolve::parse_for_debug(value, nesting, nodes);
+                if (binding.ok) bindings.emplace(name, std::move(binding.root));
+            }
         }
         const auto *binding_bytes = reinterpret_cast<const unsigned char *>(request->bindings);
         for (std::size_t index = 0; index < request->binding_count; ++index) {
@@ -720,6 +697,42 @@ texsolve_status TEXSOLVE_CALL texsolve_execute(
             (optimization_kind == TEXSOLVE_OPTIMIZATION_KIND_LEAST_SQUARES && residual_nodes.empty())) {
             return fail(TEXSOLVE_STATUS_INVALID_ARGUMENT, TEXSOLVE_DIAGNOSTIC_INCOMPLETE_PROBLEM,
                         "optimization kind and residual array disagree");
+        }
+        if (definition) {
+            const auto &target = parsed.root.children[0];
+            const auto &body = parsed.root.children[1];
+            std::map<std::string, std::string> pending_variable;
+            std::map<std::string, Definition> pending_function;
+            result->name = target.text;
+            if (target.kind == texsolve::NodeKind::Symbol) {
+                pending_variable.emplace(target.text, source_of(latex, body));
+            } else {
+                if (contains_call(body, target.text)) {
+                    parsed.message = "recursive user functions are unsupported";
+                    parsed.diagnostic_code = TEXSOLVE_DIAGNOSTIC_ARITY_MISMATCH;
+                    parsed.error_begin = body.begin;
+                    parsed.error_end = body.end;
+                    *out = make_error(TEXSOLVE_STATUS_SEMANTIC_ERROR, parsed).release();
+                    return TEXSOLVE_STATUS_SEMANTIC_ERROR;
+                }
+                Definition value;
+                for (const auto &parameter : target.children) value.parameters.push_back(parameter.text);
+                value.body = source_of(latex, body);
+                pending_function.emplace(target.text, std::move(value));
+            }
+            if (deadline_exceeded()) {
+                return fail(TEXSOLVE_STATUS_DEADLINE_EXCEEDED, TEXSOLVE_DIAGNOSTIC_DEADLINE,
+                            "request deadline exceeded");
+            }
+            ctx->variables.erase(target.text);
+            ctx->functions.erase(target.text);
+            if (target.kind == texsolve::NodeKind::Symbol) {
+                ctx->variables.insert(pending_variable.extract(target.text));
+            } else {
+                ctx->functions.insert(pending_function.extract(target.text));
+            }
+            *out = result.release();
+            return TEXSOLVE_STATUS_OK;
         }
         if (residual_only) {
             for (const auto &[name, value] : bindings) {
